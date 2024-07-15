@@ -1,6 +1,5 @@
-workspace = { members = [ "cli", "client", "common", "server"] }
 [package]
-name = "trabas"
+name = "common"
 version = "0.1.0"
 edition = "2021"
 

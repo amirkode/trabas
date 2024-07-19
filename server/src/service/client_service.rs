@@ -14,16 +14,16 @@ impl ClientService {
         ClientService { client_repo }
     }
 
-    pub fn register_client(&self, id: String) -> Result<bool, String> {
+    // register new client ID
+    // if the new tunneling client attempts to connect
+    // the client ID will be cached 
+    pub fn register_client(&self, client: TunnelClient) -> Result<(), String> {
         // save to client information to redis store
-        let tunnel_client = TunnelClient::new(id.clone());
-        self.client_repo.create(tunnel_client)?;
-        Err(String::from("implement this"))
+        self.client_repo.create(client)
     }
 
-    pub fn disconnect_client(&self, id: String) -> Result<bool, String> {
+    pub fn disconnect_client(&self, id: String) -> Result<(), String> {
         let now = Local::now().naive_local();
-        self.client_repo.set_dc(id.clone(), now)?;
-        Err(String::from("implement this"))
+        self.client_repo.set_dc(id.clone(), now)
     }
 }

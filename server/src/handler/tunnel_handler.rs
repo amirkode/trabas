@@ -1,18 +1,29 @@
 
+use common::{from_json_slice, to_json_vec, validate_signature};
 use log::error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+use tokio::time::{sleep, Duration};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use common::data::dto::public_response::PublicResponse;
+use common::data::dto::tunnel_client::TunnelClient;
 use crate::service::client_service::ClientService;
 use crate::service::public_service::PublicService;
 
-pub async fn register_tunnel_handler(mut stream: TcpStream, client_service: ClientService, public_service: PublicService) {
+pub async fn register_tunnel_handler(mut stream: TcpStream, client_service: ClientService, public_service: PublicService) -> () {
     // register client ID
-    let mut client_id = String::new();
-    stream.read_to_string(&mut client_id).await.unwrap();
-    let _ = client_service.register_client(client_id.clone());
+    let mut raw_response = Vec::new();
+    stream.read_to_end(&mut raw_response).await.unwrap();
+    let client = from_json_slice!(&raw_response, TunnelClient).unwrap();
+    let client_id = client.id.clone();
+    // validate connection before registering client
+    if !validate_connection(client.signature.clone(), client.id.clone()) {
+        let err_msg = format!("Client Registration Denied. client_id: {}, signature: {}", client_id, client.signature);
+        stream.write_all(err_msg.as_bytes()).await.unwrap();
+        return;
+    }
+    client_service.register_client(client).unwrap();
 
     // isolate stream and service inside Arc
     let stream_dc1 = Arc::new(Mutex::new(false));
@@ -40,6 +51,11 @@ pub async fn register_tunnel_handler(mut stream: TcpStream, client_service: Clie
     });
 }
 
+fn validate_connection(signature: String, client_id: String) -> bool {
+    let secret = std::env::var("SERVER_SECRET").unwrap_or_default();
+    validate_signature!(signature, client_id, secret)
+}
+
 async fn connection_checker(stream_dc: Arc<Mutex<bool>>, service: Arc<Mutex<ClientService>>, client_id: String) {
     loop {
         let dc = {
@@ -50,6 +66,9 @@ async fn connection_checker(stream_dc: Arc<Mutex<bool>>, service: Arc<Mutex<Clie
             service.lock().await.disconnect_client(client_id).unwrap();
             break;
         }
+
+        // add break interval for 2 seconds
+        sleep(Duration::from_secs(2)).await;
     }
 }
 
@@ -72,7 +91,8 @@ async fn sender_handler(stream_dc: Arc<Mutex<bool>>, stream: Arc<Mutex<TcpStream
         }
         
         // send request to client service
-        stream.lock().await.write_all(&raw_request.unwrap()).await.unwrap();
+        let bytes_req = to_json_vec!(raw_request.unwrap());
+        stream.lock().await.write_all(&bytes_req).await.unwrap();
     }
 
     // always update state if the loop exited
@@ -96,7 +116,7 @@ async fn receiver_handler(stream_dc: Arc<Mutex<bool>>, stream: Arc<Mutex<TcpStre
         stream.lock().await.read_to_end(&mut raw_response).await.unwrap();
 
         // enqueue Public Response
-        let response: PublicResponse = serde_json::from_slice(&raw_response).unwrap();
+        let response = from_json_slice!(&raw_response, PublicResponse).unwrap();
         service.lock().await.assign_response(response).await.unwrap();
     }
 

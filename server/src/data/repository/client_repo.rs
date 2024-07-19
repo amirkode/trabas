@@ -4,8 +4,8 @@ use common::data::dto::tunnel_client::TunnelClient;
 
 pub trait ClientRepo {
     fn get(&self, id: String) -> Result<TunnelClient, String>;
-    fn create(&self, client: TunnelClient) -> Result<bool, String>;
-    fn set_dc(&self, id: String, dt: NaiveDateTime) -> Result<bool, String>;
+    fn create(&self, client: TunnelClient) -> Result<(), String>;
+    fn set_dc(&self, id: String, dt: NaiveDateTime) -> Result<(), String>;
 }
 
 pub struct ClientRepoImpl {
@@ -23,11 +23,11 @@ impl ClientRepo for ClientRepoImpl {
         Err(String::from("implement this"))    
     }
 
-    fn create(&self, client: TunnelClient) -> Result<bool, String> {
+    fn create(&self, client: TunnelClient) -> Result<(), String> {
         Err(String::from("implement this"))
     }
 
-    fn set_dc(&self, id: String, dt: NaiveDateTime) -> Result<bool, String> {
+    fn set_dc(&self, id: String, dt: NaiveDateTime) -> Result<(), String> {
         Err(String::from("implement this"))
     }
 }

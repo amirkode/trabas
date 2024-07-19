@@ -2,6 +2,9 @@ mod data;
 mod handler;
 mod service;
 
+#[macro_use]
+extern crate common;
+
 use std::sync::Arc;
 
 use data::repository::client_repo::ClientRepoImpl;

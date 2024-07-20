@@ -6,3 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+common = { path = "../common" }
+client = { path = "../client" }
+server = { path = "../server" }
+clap = { version = "4.5.9", features = ["derive"] }
+tokio = { version = "1.38.0", features = ["full"] }
+
+[[bin]]
+name = "trabas"
+path = "src/main.rs"

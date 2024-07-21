@@ -228,6 +228,7 @@ dependencies = [
  "clap",
  "client",
  "common",
+ "env_logger",
  "server",
  "tokio",
 ]
@@ -236,9 +237,13 @@ dependencies = [
 name = "client"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "common",
+ "http",
+ "log",
  "mac_address",
  "rand",
+ "tokio",
 ]
 
 [[package]]
@@ -273,6 +278,7 @@ dependencies = [
  "httparse",
  "rand",
  "serde",
+ "serde_json",
  "sha2",
 ]
 
@@ -839,6 +845,7 @@ dependencies = [
 name = "server"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "common",
  "env_logger",

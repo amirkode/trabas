@@ -1,6 +1,5 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::SystemTime};
 
-use chrono::Local;
 use common::data::dto::tunnel_client::TunnelClient;
 use crate::data::repository::client_repo::ClientRepo;
 
@@ -17,13 +16,13 @@ impl ClientService {
     // register new client ID
     // if the new tunneling client attempts to connect
     // the client ID will be cached 
-    pub fn register_client(&self, client: TunnelClient) -> Result<(), String> {
+    pub async fn register_client(&self, client: TunnelClient) -> Result<(), String> {
         // save to client information to redis store
-        self.client_repo.create(client)
+        self.client_repo.create(client).await
     }
 
-    pub fn disconnect_client(&self, id: String) -> Result<(), String> {
-        let now = Local::now().naive_local();
-        self.client_repo.set_dc(id.clone(), now)
+    pub async fn disconnect_client(&self, id: String) -> Result<(), String> {
+        let now = SystemTime::now();
+        self.client_repo.set_dc(id.clone(), now).await
     }
 }

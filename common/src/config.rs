@@ -18,6 +18,8 @@ fn get_env_path() -> String {
     format!("{}/{}", config_path, CONFIG_ENV)
 }
 
+// load all configs from .env file into map
+// using BTreeMap to get ordered keys
 pub fn get_config() -> BTreeMap<String, String> {
     let env_path = get_env_path();
     let file = File::open(env_path);
@@ -74,6 +76,6 @@ pub fn set_configs(values: HashMap<String, String>) {
 }
 
 pub fn init_env_from_config() {
-    let env_path = format!("{}/{}", CONFIG_PATH, CONFIG_ENV);
+    let env_path = get_env_path();
     dotenv::from_filename(env_path).ok();
 }

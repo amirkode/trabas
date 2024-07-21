@@ -1,0 +1,13 @@
+version: '3.8'
+
+x-service-group: trabas
+
+services:
+  redis:
+    container_name: trabas-redis
+    image: redis:latest
+    ports:
+      - "6377:6379"
+    command: redis-server --requirepass trabas-pass
+    volumes:  
+      - ./data/redis:/data

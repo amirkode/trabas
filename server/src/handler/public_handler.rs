@@ -1,8 +1,10 @@
 use chrono::Utc;
+use common::convert::{parse_request_bytes, request_to_bytes, response_to_bytes};
 use hex;
+use log::{error, info};
 use sha2::{Sha256, Digest};
-use common::{parse_request_bytes, request_to_bytes};
 use http::{Request, Uri};
+use http::{Response, Version};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use common::data::dto::public_request::PublicRequest;
@@ -16,16 +18,54 @@ pub async fn register_public_handler(mut stream: TcpStream, service: PublicServi
 
 // handling public request up to receive a response
 // TODO: implement error responses
-async fn public_handler(mut stream: TcpStream, service: PublicService) {
+async fn public_handler(mut stream: TcpStream, service: PublicService) -> () {
     // read data as bytes
+    let mut buffer = [0; 1024];
     let mut raw_request = Vec::new();
-    stream.read_to_end(&mut raw_request).await.unwrap();
+    loop {
+        let n = stream.read(&mut buffer).await.unwrap();
+        raw_request.extend_from_slice(&buffer[..n]);
+        
+        // until the end of the headers
+        if raw_request.windows(4).any(|window| window == b"\r\n\r\n") {
+            break;
+        }
+    }
+
+    // stream.read(&mut raw_request).await.unwrap();
+
+    info!("New request has just been read");
 
     // parse the raw request
-    let request = parse_request_bytes!(&raw_request).unwrap();
+    let request = match parse_request_bytes(&raw_request) {
+        Some(value) => value,
+        None => {
+            let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\noeieiei!";
+
+            stream.write_all(response.as_bytes()).await.unwrap();
+            error!("Parsing on empty request");
+            return;
+        }   
+    };
     // get client and transfor request at the same time
-    let (request, client_id) = get_client_id(request).unwrap();
-    raw_request = request_to_bytes!(request);
+    let (request, client_id) = match get_client_id(request) {
+        Ok(value) => value,
+        Err(msg) => {
+            error!("{}", msg);
+            let response = Response::builder()
+            .version(Version::HTTP_11)
+            .status(200)
+            .header("Content-Type", "text/plain")
+            .body(String::from("thequickborwnfojumpsover"))
+            .unwrap();
+
+            stream.write_all(&response_to_bytes(&response)).await.unwrap();
+            // stream.shutdown().await.unwrap();
+            // stream.write_all(msg.as_bytes()).await.unwrap();
+            return;
+        }
+    };
+    raw_request = request_to_bytes(&request);
 
     let request_id = genereate_request_id(client_id.clone());
     let public_request = PublicRequest {
@@ -36,10 +76,14 @@ async fn public_handler(mut stream: TcpStream, service: PublicService) {
 
     // enqueue the request to redis
     service.enqueue_request(public_request).await.unwrap();
+
+    info!("Public Request: {} was enqueued.", request_id.clone());
     
     // wait for response
     let timeout = 30u64; // time out in seconds
-    let res = service.get_response(request_id, timeout).await.unwrap();
+    let res = service.get_response(request_id.clone(), timeout).await.unwrap();
+
+    info!("Public Request: {} processed.", request_id);
 
     // finally return the response to public client
     stream.write_all(&(res.data)).await.unwrap();

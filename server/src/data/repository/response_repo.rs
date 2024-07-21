@@ -1,28 +1,41 @@
-use chrono::NaiveDateTime;
-use redis::{Client, Commands, RedisError};
-use common::data::dto::public_response::PublicResponse;
+use async_trait::async_trait;
+use redis::{aio::MultiplexedConnection, AsyncCommands};
+use common::{convert::{from_json_slice, to_json_vec}, data::dto::public_response::PublicResponse};
 
+const REDIS_KEY_PUBLIC_RESPONSE: &str = "public_responses";
+
+#[async_trait]
 pub trait ResponseRepo {
-    fn set(&self, response: PublicResponse) -> Result<(), String>;
-    fn pop(&self, request_id: String) -> Result<PublicResponse, String>;
+    async fn set(&self, response: PublicResponse) -> Result<(), String>;
+    async fn pop(&self, request_id: String) -> Result<PublicResponse, String>;
 }
 
 pub struct ResponseRepoImpl {
-    client: Client
+    connection: MultiplexedConnection
 }
 
 impl ResponseRepoImpl {
-    pub fn new(client: Client) -> Self {
-        ResponseRepoImpl { client }
+    pub fn new(connection: MultiplexedConnection) -> Self {
+        ResponseRepoImpl { connection }
     }
 }
 
+#[async_trait]
 impl ResponseRepo for ResponseRepoImpl {
-    fn set(&self, response: PublicResponse) -> Result<(), String> {
-        Err(String::from("implement this"))
+    async fn set(&self, response: PublicResponse) -> Result<(), String> {
+        let data = to_json_vec(&response);
+        self.connection.clone().hset(REDIS_KEY_PUBLIC_RESPONSE, response.request_id.clone(), data).await
+            .map_err(|e| format!("Error setting response {}: {}", response.request_id, e))?;
+        Ok(())
     }
 
-    fn pop(&self, request_id: String) -> Result<PublicResponse, String> {
-        Err(String::from("implement this"))
+    async fn pop(&self, request_id: String) -> Result<PublicResponse, String> {
+        let data: Vec<u8> = self.connection.clone().hget(REDIS_KEY_PUBLIC_RESPONSE, request_id.clone()).await
+            .map_err(|e| format!("Error getting response {}: {}", request_id, e))?;
+        let res: PublicResponse = from_json_slice(&data).unwrap();
+        // delete data
+        self.connection.clone().hdel(REDIS_KEY_PUBLIC_RESPONSE, request_id.clone()).await
+            .map_err(|e| format!("Error deleting {}: {}", request_id, e))?;
+        Ok(res)
     }
 }

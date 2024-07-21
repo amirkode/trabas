@@ -16,7 +16,7 @@ pub enum ReqBodyType {
 
 // after few considerations, it doesn't really to breakdown explicit request specs
 // serialization of the actual request would do the job 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct PublicRequest {
     pub id: String,
     pub client_id: String,

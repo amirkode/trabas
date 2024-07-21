@@ -6,9 +6,24 @@ use mac_address::get_mac_address;
 
 use common::config::{get_config, set_configs};
 
-const CONFIG_KEY_CLIENT_ID: &str = "CL_ID";
-const CONFIG_KEY_CLIENT_SERVER_HOST: &str = "CL_SERVER_HOST";
-const CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY: &str = "CL_SERVER_SIGNING_KEY";
+pub const CONFIG_KEY_CLIENT_ID: &str = "CL_ID";
+pub const CONFIG_KEY_CLIENT_SERVER_HOST: &str = "CL_SERVER_HOST";
+pub const CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY: &str = "CL_SERVER_SIGNING_KEY";
+
+// simple validation for config keys
+pub fn validate_configs() {
+    let config = get_config();
+    let required_keys = [
+        CONFIG_KEY_CLIENT_ID,
+        CONFIG_KEY_CLIENT_SERVER_HOST,
+        CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY
+    ];
+    for key in required_keys {
+        if !config.contains_key(key) {
+            panic!("{} config has not been set.", key)
+        }
+    }
+}
 
 pub fn generate_client_id(custom_id: Option<String>, force: bool) -> () {
     // check whether the client is already set

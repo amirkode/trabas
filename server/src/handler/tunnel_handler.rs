@@ -1,6 +1,7 @@
 
-use common::{from_json_slice, to_json_vec, validate_signature};
-use log::error;
+use common::convert::{from_json_slice, to_json_vec};
+use common::validate_signature;
+use log::{error, info};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::{sleep, Duration};
@@ -8,6 +9,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use common::data::dto::public_response::PublicResponse;
 use common::data::dto::tunnel_client::TunnelClient;
+use crate::config;
 use crate::service::client_service::ClientService;
 use crate::service::public_service::PublicService;
 
@@ -15,15 +17,24 @@ pub async fn register_tunnel_handler(mut stream: TcpStream, client_service: Clie
     // register client ID
     let mut raw_response = Vec::new();
     stream.read_to_end(&mut raw_response).await.unwrap();
-    let client = from_json_slice!(&raw_response, TunnelClient).unwrap();
+    let client: TunnelClient = from_json_slice(&raw_response).unwrap();
     let client_id = client.id.clone();
     // validate connection before registering client
     if !validate_connection(client.signature.clone(), client.id.clone()) {
         let err_msg = format!("Client Registration Denied. client_id: {}, signature: {}", client_id, client.signature);
         stream.write_all(err_msg.as_bytes()).await.unwrap();
+        error!("{}", err_msg);
         return;
+    } else {
+        // acknowledge the successful handshake
+        let ok = b"ok";
+        stream.write_all(ok).await.unwrap();
+
+        let msg = format!("Client Registration Successful. client_id: {}, signature: {}", client_id, client.signature);
+        error!("{}", msg);
     }
-    client_service.register_client(client).unwrap();
+
+    client_service.register_client(client).await.unwrap();
 
     // isolate stream and service inside Arc
     let stream_dc1 = Arc::new(Mutex::new(false));
@@ -52,7 +63,7 @@ pub async fn register_tunnel_handler(mut stream: TcpStream, client_service: Clie
 }
 
 fn validate_connection(signature: String, client_id: String) -> bool {
-    let secret = std::env::var("SERVER_SECRET").unwrap_or_default();
+    let secret = std::env::var(config::CONFIG_KEY_SERVER_SECRET).unwrap_or_default();
     validate_signature!(signature, client_id, secret)
 }
 
@@ -63,7 +74,7 @@ async fn connection_checker(stream_dc: Arc<Mutex<bool>>, service: Arc<Mutex<Clie
             *guard
         };
         if dc {
-            service.lock().await.disconnect_client(client_id).unwrap();
+            service.lock().await.disconnect_client(client_id).await.unwrap();
             break;
         }
 
@@ -73,6 +84,7 @@ async fn connection_checker(stream_dc: Arc<Mutex<bool>>, service: Arc<Mutex<Clie
 }
 
 async fn sender_handler(stream_dc: Arc<Mutex<bool>>, stream: Arc<Mutex<TcpStream>>, service: Arc<Mutex<PublicService>>) {
+    info!("Sender handler started.");
     loop {
         // check stream connection
         let dc = {
@@ -89,10 +101,14 @@ async fn sender_handler(stream_dc: Arc<Mutex<bool>>, stream: Arc<Mutex<TcpStream
             error!("Error getting pending requests: {}", message);
             continue;
         }
+
+        let public_request = raw_request.unwrap();
         
         // send request to client service
-        let bytes_req = to_json_vec!(raw_request.unwrap());
+        let bytes_req = to_json_vec(&public_request.clone());
         stream.lock().await.write_all(&bytes_req).await.unwrap();
+
+        info!("Request: {} was sent to client: {}.", public_request.id, public_request.client_id);
     }
 
     // always update state if the loop exited
@@ -101,6 +117,7 @@ async fn sender_handler(stream_dc: Arc<Mutex<bool>>, stream: Arc<Mutex<TcpStream
 }
 
 async fn receiver_handler(stream_dc: Arc<Mutex<bool>>, stream: Arc<Mutex<TcpStream>>, service: Arc<Mutex<PublicService>>) {
+    info!("Receiver handler started.");
     loop {
         // check stream connection
         let dc = {
@@ -116,8 +133,10 @@ async fn receiver_handler(stream_dc: Arc<Mutex<bool>>, stream: Arc<Mutex<TcpStre
         stream.lock().await.read_to_end(&mut raw_response).await.unwrap();
 
         // enqueue Public Response
-        let response = from_json_slice!(&raw_response, PublicResponse).unwrap();
-        service.lock().await.assign_response(response).await.unwrap();
+        let response: PublicResponse = from_json_slice(&raw_response).unwrap();
+        service.lock().await.assign_response(response.clone()).await.unwrap();
+
+        info!("Response received for request: {}.", response.request_id);
     }
 
     // always update state if the loop exited

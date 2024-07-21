@@ -21,20 +21,20 @@ impl PublicService {
     // enqueue a public client request to temporary database (redis)
     // the request will further be forwarded to target client service (provider)
     pub async fn enqueue_request(&self, request: PublicRequest) -> Result<(), String> {
-        (*self.request_repo).push_back(request)
+        (*self.request_repo).push_back(request).await
     }
 
     // dequeue from request queue (FIFO)
     // reconsider the return type to directly return Vec<u8>
     // since it's the type returned by redis
     pub async fn dequeue_request(&self) -> Result<PublicRequest, String> {
-        (*self.request_repo).pop_front()
+        (*self.request_repo).pop_front().await
     }
 
     // assign response to hashes mapped by request_id
     // the response is ready to be returned
     pub async fn assign_response(&self, response: PublicResponse) -> Result<(), String> {
-        (*self.response_repo).set(response)
+        (*self.response_repo).set(response).await
     }
 
     // get response by corresponding request id
@@ -47,7 +47,7 @@ impl PublicService {
         sleep(Duration::from_millis(20)).await;
         loop {
             // check data and return right away if it's found
-            let res = (*self.response_repo).pop(request_id.clone());
+            let res = (*self.response_repo).pop(request_id.clone()).await;
             if res.is_ok() {
                 return Ok(res.unwrap())
             }

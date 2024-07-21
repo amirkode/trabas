@@ -5,7 +5,9 @@ pub mod types;
 pub mod config;
 
 use std::sync::Arc;
+use log::info;
 
+use config::validate_configs;
 use data::repository::client_repo::ClientRepoImpl;
 use data::repository::request_repo::RequestRepoImpl;
 use data::repository::response_repo::ResponseRepoImpl;
@@ -16,24 +18,24 @@ use service::client_service::ClientService;
 use service::public_service::PublicService;
 
 use tokio::net::TcpListener;
-use env_logger::{Env, Builder, Target};
 
 // entry point of the server service
-pub async fn run(public_port: String, client_port: String) {
-    Builder::from_env(Env::default().default_filter_or("info"))
-        .target(Target::Stdout)
-        .format_timestamp_millis()
-        .init();
-
+pub async fn run(public_port: u16, client_port: u16) {
+    validate_configs();
     // init instances
-    let public_listener = TcpListener::bind(format!("0.0.0.0:{}", public_port)).await.unwrap();
-    let client_listener = TcpListener::bind(format!("0.0.0.0:{}", client_port)).await.unwrap();
+    let root_host = "localhost"; // TODO: localhost for testing, considering "0.0.0.0" later for other usecases
+    let public_listener = TcpListener::bind(format!("{}:{}", root_host, public_port)).await.unwrap();
+    let client_listener = TcpListener::bind(format!("{}:{}", root_host, client_port)).await.unwrap();
     let redis_store = RedisDataStore::new().unwrap();
-    let client_repo = ClientRepoImpl::new(redis_store.client.clone());
-    let request_repo = RequestRepoImpl::new(redis_store.client.clone());
-    let response_repo = ResponseRepoImpl::new(redis_store.client.clone());
+    let redis_connection = redis_store.client.get_multiplexed_async_connection().await.unwrap();
+    let client_repo = ClientRepoImpl::new(redis_connection.clone());
+    let request_repo = RequestRepoImpl::new(redis_connection.clone());
+    let response_repo = ResponseRepoImpl::new(redis_connection.clone());
     let client_service = ClientService::new(Arc::new(client_repo));
     let public_service = PublicService::new(Arc::new(request_repo), Arc::new(response_repo));
+
+    info!("[Public Listerner] Listening on :{}", public_listener.local_addr().unwrap());
+    info!("[Client Listerner] Listening on :{}", client_listener.local_addr().unwrap());
 
     loop {
         tokio::select! {

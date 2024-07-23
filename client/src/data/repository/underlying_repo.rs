@@ -27,7 +27,7 @@ impl UnderlyingRepo for UnderlyingRepoImpl {
         
         // read response
         let mut res = Vec::new();
-        read_bytes_from_socket(&mut stream, &mut res).await;
+        read_bytes_from_socket(&mut stream, &mut res).await?;
 
         Ok(res)
     }

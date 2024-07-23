@@ -1,6 +1,6 @@
 // TODO: implement this
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use http::StatusCode;
 
@@ -10,31 +10,60 @@ use common::{
     net::{ack_health_check_packet, http_json_response_as_bytes, read_bytes_from_mutexed_socket, read_string_from_socket, HttpResponse}, 
     security::sign_value
 };
-use tokio::{io::AsyncWriteExt, net::TcpStream, sync::Mutex, time::Instant};
+use tokio::{io::AsyncWriteExt, net::TcpStream, sync::Mutex, time::{sleep, Instant}};
 use log::{error, info};
 
 use crate::{config, service::underlying_service::UnderlyingService};
 
-pub async fn register_handler(mut stream: TcpStream, underlying_host: String, service: UnderlyingService) -> () {
-    // send connection request to server service
-    let tunnel_client = get_tunnel_client();
-    let bytes_req = to_json_vec(&tunnel_client);
+pub async fn register_handler(underlying_host: String, service: UnderlyingService) -> () {
+    let server_host = std::env::var(config::CONFIG_KEY_CLIENT_SERVER_HOST).unwrap_or_default();
+    // is one thousands a good enough limit (?)
+    let mut max_tries = 1000;
+    while max_tries > 0 {
+        if max_tries < 1000 {
+            // add break interval for 5 seconds
+            info!("Break for 5 second for the next attempt");
+            sleep(Duration::from_secs(5)).await;
+        }
 
-    info!("Connecting to server service...");
-    stream.write_all(&bytes_req).await.unwrap();
-    // check if the server handshake was successful
-    let mut ok: String = Default::default();
-    read_string_from_socket(&mut stream, &mut ok).await;
-    if ok != "ok" {
-        error!("Error connecting to server service: {}", ok);
-        return;
+        max_tries -= 1;
+
+        info!("Binding to server service: {}", server_host.clone()); 
+        let mut stream = match TcpStream::connect(server_host.clone()).await {
+            Ok(ok) => ok,
+            Err(e) => {
+                error!("Error connecting to {}: {}", server_host, e);
+                continue;
+            }
+        };
+
+        // send connection request to server service
+        let tunnel_client = get_tunnel_client();
+        let bytes_req = to_json_vec(&tunnel_client);
+
+        info!("Connecting to server service...");
+        if let Err(e) = stream.write_all(&bytes_req).await {
+            error!("Error connecting to server service: {}", e);
+            continue;
+        }
+
+        // check if the server handshake was successful
+        let mut ok: String = Default::default();
+        if let Err(e) = read_string_from_socket(&mut stream, &mut ok).await {
+            error!("Error connecting to server service: {}", e);
+            continue;
+        }
+        if ok != "ok" {
+            error!("Error connecting to server service: {}", ok);
+            continue;
+        }
+
+        info!("Connected to server service.");
+
+        let stream_mutex = Arc::new(Mutex::new(stream));
+        // start tunnel handler
+        tunnel_handler(stream_mutex, underlying_host.clone(), service.clone()).await;
     }
-
-    info!("Connected to server service.");
-
-    let stream_mutex = Arc::new(Mutex::new(stream));
-    // start tunnel handler
-    tunnel_handler(stream_mutex, underlying_host, service).await;
 }
 
 fn get_tunnel_client() -> TunnelClient {
@@ -51,7 +80,11 @@ pub async fn tunnel_handler(stream: Arc<Mutex<TcpStream>>, underlying_host: Stri
     loop {
         // get incoming request server service to forward
         let mut request = Vec::new();
-        read_bytes_from_mutexed_socket(stream.clone(), &mut request).await;
+        if let Err(e) = read_bytes_from_mutexed_socket(stream.clone(), &mut request).await {
+            error!("{}", e);
+            break;
+        }
+
         if request.len() == 0 {
             // no request found yet
             continue;
@@ -91,7 +124,10 @@ pub async fn tunnel_handler(stream: Arc<Mutex<TcpStream>>, underlying_host: Stri
 
         // foward response from underlying service to server service
         let bytes_res = to_json_vec(&public_response);
-        stream.lock().await.write_all(&bytes_res).await.unwrap();
+        if let Err(e) = stream.lock().await.write_all(&bytes_res).await {
+            error!("{}", e);
+            break;
+        }
 
         info!("Incoming request: {} processed.", public_request.id);
     }

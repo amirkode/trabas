@@ -32,6 +32,10 @@ impl ResponseRepo for ResponseRepoImpl {
     async fn pop(&self, request_id: String) -> Result<PublicResponse, String> {
         let data: Vec<u8> = self.connection.clone().hget(REDIS_KEY_PUBLIC_RESPONSE, request_id.clone()).await
             .map_err(|e| format!("Error getting response {}: {}", request_id, e))?;
+        if data.len() == 0 {
+            return Err(String::from("Error getting response: no response available"));
+        }
+
         let res: PublicResponse = from_json_slice(&data).unwrap();
         // delete data
         self.connection.clone().hdel(REDIS_KEY_PUBLIC_RESPONSE, request_id.clone()).await

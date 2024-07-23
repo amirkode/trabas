@@ -5,7 +5,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 // parse bytes request data to instance of http::Request 
-pub fn parse_request_bytes(request_bytes: &[u8]) -> Option<Request<()>> {
+pub fn parse_request_bytes(request_bytes: &[u8]) -> Option<Request<Vec<u8>>> {
     let mut headers = [httparse::EMPTY_HEADER; 64];
     let mut req = httparse::Request::new(&mut headers);
     match req.parse(request_bytes) {
@@ -15,7 +15,7 @@ pub fn parse_request_bytes(request_bytes: &[u8]) -> Option<Request<()>> {
             let version = match req.version.unwrap() {
                 1 => Version::HTTP_11,
                 2 => Version::HTTP_2,
-                _ => Version::HTTP_10
+                _ => Version::HTTP_10,
             };
 
             let mut request_builder = Request::builder()
@@ -27,14 +27,18 @@ pub fn parse_request_bytes(request_bytes: &[u8]) -> Option<Request<()>> {
                 request_builder = request_builder.header(h.name, h.value);
             }
 
-            request_builder.body(()).ok()
+            // extract the body part
+            let header_length = status.unwrap();
+            let body = request_bytes[header_length..].to_vec();
+
+            request_builder.body(body).ok()
         }
-        _ => None
+        _ => None,
     }
 }
 
 // parse request instance to bytes
-pub fn request_to_bytes<T>(request: &Request<T>) -> Vec<u8> {
+pub fn request_to_bytes(request: &Request<Vec<u8>>) -> Vec<u8> {
     let mut bytes = Vec::new();
     
     let method = request.method().as_str();
@@ -53,13 +57,17 @@ pub fn request_to_bytes<T>(request: &Request<T>) -> Vec<u8> {
     }
     
     write!(bytes, "\r\n").unwrap();
+
+    // lastly the body
+    let body_bytes = request.body();
+    bytes.extend_from_slice(&body_bytes);
     
     bytes
 }
 
 // parse response to bytes
 // TODO: accept no string format
-pub fn response_to_bytes(response: &Response<String>) -> Vec<u8> {
+pub fn response_to_bytes(response: &Response<Vec<u8>>) -> Vec<u8> {
     let mut bytes = Vec::new();
     
     let version = match response.version() {
@@ -77,6 +85,10 @@ pub fn response_to_bytes(response: &Response<String>) -> Vec<u8> {
     }
     
     write!(bytes, "\r\n").unwrap();
+
+    // lastly the body
+    let body_bytes = response.body();
+    bytes.extend_from_slice(&body_bytes);
     
     bytes
 }

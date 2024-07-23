@@ -43,8 +43,8 @@ impl PublicService {
     pub async fn get_response(&self, request_id: String, timeout_in_secs: u64) -> Result<PublicResponse, String> {
         let start_time = Instant::now();
         let mut elapsed: u64;
-        // add initial break for 20 ms
-        sleep(Duration::from_millis(20)).await;
+        // add initial break for 4 ms
+        sleep(Duration::from_millis(4)).await;
         loop {
             // check data and return right away if it's found
             let res = (*self.response_repo).pop(request_id.clone()).await;
@@ -52,8 +52,8 @@ impl PublicService {
                 return Ok(res.unwrap())
             }
 
-            // add break interval for 100 ms
-            sleep(Duration::from_millis(100)).await;
+            // add break interval for 10 ms
+            sleep(Duration::from_millis(10)).await;
             elapsed = start_time.elapsed().as_secs();
             if elapsed >= timeout_in_secs {
                 break;

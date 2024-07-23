@@ -1,16 +1,16 @@
 use chrono::Utc;
 use common::convert::{parse_request_bytes, request_to_bytes, response_to_bytes};
+use common::net::{http_json_response_as_bytes, read_bytes_from_socket, HttpResponse};
 use hex;
 use log::{error, info};
 use sha2::{Sha256, Digest};
-use http::{Request, Uri};
-use http::{Response, Version};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use http::{Request, StatusCode, Uri};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use common::data::dto::public_request::PublicRequest;
 use crate::service::public_service::PublicService;
 
-pub async fn register_public_handler(mut stream: TcpStream, service: PublicService) {
+pub async fn register_public_handler(stream: TcpStream, service: PublicService) {
     tokio::spawn(async move {
         public_handler(stream, service).await;
     });
@@ -19,20 +19,13 @@ pub async fn register_public_handler(mut stream: TcpStream, service: PublicServi
 // handling public request up to receive a response
 // TODO: implement error responses
 async fn public_handler(mut stream: TcpStream, service: PublicService) -> () {
+    info!("Tunnel handler started.");
     // read data as bytes
-    let mut buffer = [0; 1024];
     let mut raw_request = Vec::new();
-    loop {
-        let n = stream.read(&mut buffer).await.unwrap();
-        raw_request.extend_from_slice(&buffer[..n]);
-        
-        // until the end of the headers
-        if raw_request.windows(4).any(|window| window == b"\r\n\r\n") {
-            break;
-        }
+    if let Err(e) = read_bytes_from_socket(&mut stream, &mut raw_request).await {
+        error!("{}", e);
+        return;
     }
-
-    // stream.read(&mut raw_request).await.unwrap();
 
     info!("New request has just been read");
 
@@ -52,14 +45,15 @@ async fn public_handler(mut stream: TcpStream, service: PublicService) -> () {
         Ok(value) => value,
         Err(msg) => {
             error!("{}", msg);
-            let response = Response::builder()
-            .version(Version::HTTP_11)
-            .status(200)
-            .header("Content-Type", "text/plain")
-            .body(String::from("thequickborwnfojumpsover"))
-            .unwrap();
+            let response = match http_json_response_as_bytes(
+                HttpResponse::new(false, msg), StatusCode::from_u16(400).unwrap()) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        return;
+                    } 
+                };
 
-            stream.write_all(&response_to_bytes(&response)).await.unwrap();
+            stream.write_all(&response).await.unwrap();
             // stream.shutdown().await.unwrap();
             // stream.write_all(msg.as_bytes()).await.unwrap();
             return;
@@ -81,7 +75,17 @@ async fn public_handler(mut stream: TcpStream, service: PublicService) -> () {
     
     // wait for response
     let timeout = 30u64; // time out in seconds
-    let res = service.get_response(request_id.clone(), timeout).await.unwrap();
+    let res = match service.get_response(request_id.clone(), timeout).await {
+        Ok(value) => value,
+        Err(msg) => {
+            error!("{}", msg);
+            let response = http_json_response_as_bytes(
+                HttpResponse::new(false, msg), StatusCode::from_u16(400).unwrap()).unwrap();
+
+            stream.write_all(&response).await.unwrap();
+            return;
+        }
+    };
 
     info!("Public Request: {} processed.", request_id);
 

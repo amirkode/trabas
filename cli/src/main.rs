@@ -38,9 +38,9 @@ const CONFIG_ARG_SV_REDIS_PASS: &str = "redis-pass";
 #[derive(Subcommand)]
 enum ClientActions {
     Serve {
-        #[arg(short, long)]
+        #[arg(long)]
         host: Option<String>,
-        #[arg(short, long, default_value_t = 3000)]
+        #[arg(long, default_value_t = 3000)]
         port: u16,
     },
     SetConfig {

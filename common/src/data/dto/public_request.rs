@@ -1,3 +1,5 @@
+use core::fmt;
+
 use serde::{Deserialize, Serialize};
 
 // still don't know whether these enums are required yet
@@ -21,4 +23,11 @@ pub struct PublicRequest {
     pub id: String,
     pub client_id: String,
     pub data: Vec<u8>
+}
+
+impl fmt::Display for PublicRequest {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // Write the desired string representation of the struct
+        write!(f, "[id: {}, client_id: {})", self.id, self.client_id)
+    }
 }

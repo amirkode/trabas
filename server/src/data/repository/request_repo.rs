@@ -31,6 +31,10 @@ impl RequestRepo for RequestRepoImpl {
     async fn pop_front(&self) -> Result<PublicRequest, String> {
         let data: Vec<u8> = self.connection.clone().rpop(REDIS_KEY_PUBLIC_REQUEST, None).await
             .map_err(|e| format!("Error popping request: {}", e))?;
+        if data.len() == 0 {
+            return Err(String::from("Error popping request: no pending request was found"));
+        }
+        
         let res: PublicRequest = from_json_slice(&data).unwrap();
         Ok(res)
     }

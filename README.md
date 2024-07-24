@@ -1,4 +1,4 @@
-# Trabas - an HTTP Tunneling Tool [UNRELEAED - COMING SOON]
+# Trabas - an HTTP Tunneling Tool [UNRELEASED - COMING SOON]
 > This project is still under initial development. A breaking change might happen anytime. Please, use it while watching for the latest update.
 
 Trabas is an (ngrok-like inspired) HTTP tunneling written in Rust utilizing standard TCP connection for data exchange. It offers simplicity for basic tunneling usage through an _easy-to-use_ All-in-One CLI. Find out more below!
@@ -10,7 +10,7 @@ This tool consists of two services:
 - Server Service
   - Listens for public requests and client service.
   - Forwards public request to clent service.
-  - Utilizes Redis for request qeueu.
+  - Utilizes Redis for request queue.
 - Client Service
     - Forwards request received from server service to the underlying service.
 
@@ -46,7 +46,10 @@ Soon
 ## Contribution
 Coming soon
 
+## Disclaimer
+This project was intended for personal use
+
 ## License
 Copyright (c) 2024-present [Authors](https://github.com/amirkode/trabas/blob/main/AUTHORS) and Contributors.
 
-Go-mongr8 is distributed under the [MIT License](https://opensource.org/license/mit/).
+Trabas is distributed under the [MIT License](https://opensource.org/license/mit/).

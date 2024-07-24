@@ -7,7 +7,7 @@ const REDIS_KEY_PUBLIC_REQUEST: &str = "public_requests";
 #[async_trait]
 pub trait RequestRepo {
     async fn push_back(&self, request: PublicRequest) -> Result<(), String>;
-    async fn pop_front(&self) -> Result<PublicRequest, String>;
+    async fn pop_front(&self, client_id: String) -> Result<PublicRequest, String>;
 }
 
 pub struct RequestRepoImpl {
@@ -24,12 +24,14 @@ impl RequestRepoImpl {
 impl RequestRepo for RequestRepoImpl {
     async fn push_back(&self, request: PublicRequest) -> Result<(), String> {
         let data = to_json_vec(&request);
-        self.connection.clone().lpush(REDIS_KEY_PUBLIC_REQUEST, &data).await
+        let key = format!("{}_{}", REDIS_KEY_PUBLIC_REQUEST, request.client_id);
+        self.connection.clone().lpush(key, &data).await
             .map_err(|e| format!("Error pushing request {}: {}", request.id, e))?;
         Ok(())
     }
-    async fn pop_front(&self) -> Result<PublicRequest, String> {
-        let data: Vec<u8> = self.connection.clone().rpop(REDIS_KEY_PUBLIC_REQUEST, None).await
+    async fn pop_front(&self, client_id: String) -> Result<PublicRequest, String> {
+        let key = format!("{}_{}", REDIS_KEY_PUBLIC_REQUEST, client_id);
+        let data: Vec<u8> = self.connection.clone().rpop(key, None).await
             .map_err(|e| format!("Error popping request: {}", e))?;
         if data.len() == 0 {
             return Err(String::from("Error popping request: no pending request was found"));

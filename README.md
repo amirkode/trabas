@@ -10,7 +10,7 @@ This tool consists of two services:
 - Server Service
   - Listens for public requests and client service.
   - Forwards public request to clent service.
-  - Utilizes Redis for request qeueu.
+  - Utilizes Redis for request queue.
 - Client Service
     - Forwards request received from server service to the underlying service.
 

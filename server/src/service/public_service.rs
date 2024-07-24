@@ -27,8 +27,8 @@ impl PublicService {
     // dequeue from request queue (FIFO)
     // reconsider the return type to directly return Vec<u8>
     // since it's the type returned by redis
-    pub async fn dequeue_request(&self) -> Result<PublicRequest, String> {
-        (*self.request_repo).pop_front().await
+    pub async fn dequeue_request(&self, client_id: String) -> Result<PublicRequest, String> {
+        (*self.request_repo).pop_front(client_id).await
     }
 
     // assign response to hashes mapped by request_id

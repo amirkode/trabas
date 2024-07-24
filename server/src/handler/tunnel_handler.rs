@@ -93,7 +93,7 @@ async fn tunnel_handler(stream: Arc<Mutex<TcpStream>>, public_service: Arc<Mutex
     info!("Tunnel handler started.");
     loop {
         // request from the queue
-        let raw_request = public_service.lock().await.dequeue_request().await;
+        let raw_request = public_service.lock().await.dequeue_request(client_id.clone()).await;
         if let Err(message) = raw_request {
             // error!("Error getting pending requests: {}", message);
             // sleep(Duration::from_secs(5)).await;

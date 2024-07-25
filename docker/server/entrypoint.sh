@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Initialize any environment variables or execute commands
+# init redis env
 export REDIS_HOST=${REDIS_HOST:-127.0.0.1}
 export REDIS_PORT=${REDIS_PORT:-6379}
 export REDIS_PASS=${REDIS_PASS:-serverpass}
@@ -12,4 +12,4 @@ export REDIS_PASS=${REDIS_PASS:-serverpass}
 redis-server --requirepass $REDIS_PASS --daemonize yes
 
 # start trabas server
-/install/bin/trabas server run --host 0.0.0.0 --public_port 8787 --client_port 8789 
+/install/bin/trabas server run --host 0.0.0.0 --public-port 8787 --client-port 8789 

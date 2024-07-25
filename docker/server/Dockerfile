@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /install
 
 # clone from the trabas repo
-RUN git clone -b dockerize https://github.com/amirkode/trabas.git .
+RUN git clone https://github.com/amirkode/trabas.git .
 
 # build now
 RUN cargo build --release --manifest-path cli/Cargo.toml

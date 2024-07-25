@@ -1,7 +1,7 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 HOST = 'localhost'
-PORT = 8787
+PORT = 8007
 
 class PingPongHandler(BaseHTTPRequestHandler):
   def do_GET(self):

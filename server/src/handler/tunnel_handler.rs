@@ -24,7 +24,15 @@ pub async fn register_tunnel_handler(mut stream: TcpStream, client_service: Clie
     }
 
     info!("Done reading connection");
-    let client: TunnelClient = from_json_slice(&raw_response).unwrap();
+    let client: TunnelClient = match from_json_slice(&raw_response) {
+        Some(value) => value,
+        None => {
+            let err_msg = format!("Invalid request");
+            error!("{}", err_msg);
+            stream.write_all(err_msg.as_bytes()).await.unwrap();
+            return;    
+        }
+    };
     let client_id = client.id.clone();
     // validate connection before registering client
     if !validate_connection(client.signature.clone(), client.id.clone()) {

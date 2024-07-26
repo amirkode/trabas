@@ -18,14 +18,13 @@ Here's how to start tunneling:
 
 **Service Service**
 ```console
-foo@bar:~$ trabas server run --public-port 8001 --client-port
- 8002
+foo@bar:~$ trabas server run --public-port 8001 --client-port 8002
 ```
 this starts the public request and client service listeners.
 
 **Client Service**
 ```console
-foo@bar:~$ trabas client serve --host localhost --port 300
+foo@bar:~$ trabas client serve --host localhost --port 3000
 ```
 this starts the public request and client service listeners.
 

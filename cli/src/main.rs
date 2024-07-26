@@ -74,6 +74,8 @@ enum ClientActions {
 #[derive(Subcommand)]
 enum ServerActions {
     Run {
+        #[arg(short, long)]
+        host: Option<String>,
         #[arg(short, long, default_value_t = 8000)]
         public_port: u16,
         #[arg(short, long, default_value_t = 8000)]
@@ -159,11 +161,15 @@ async fn main() {
             }
         },
         Commands::Server { action } => match action {
-            ServerActions::Run { public_port, client_port } => {
-                server::run(*public_port, *client_port).await
+            ServerActions::Run { host, public_port, client_port } => {
+                let root_host = match host {
+                    Some(value) => (*value).clone(),
+                    None => String::from("127.0.0.1")
+                };
+                server::run(root_host,*public_port, *client_port).await
             },
             ServerActions::SetConfig { gen_key, redis_host, redis_port, redis_pass, force } => {
-                if gen_key.is_none() && redis_host.is_none() && redis_port.is_none() && redis_port.is_none() {
+                if gen_key.is_none() && redis_host.is_none() && redis_port.is_none() && redis_pass.is_none() {
                     let mut cmd = Cli::command();
                     cmd.error(
                         ErrorKind::MissingRequiredArgument,
@@ -172,7 +178,7 @@ async fn main() {
                             CONFIG_ARG_SV_GEN_KEY,
                             CONFIG_ARG_SV_REDIS_HOST,
                             CONFIG_ARG_SV_REDIS_PORT,
-                            CONFIG_ARG_SV_REDIS_PORT
+                            CONFIG_ARG_SV_REDIS_PASS
                         )
                     ).exit();
                 }

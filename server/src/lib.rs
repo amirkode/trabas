@@ -20,10 +20,9 @@ use service::public_service::PublicService;
 use tokio::net::TcpListener;
 
 // entry point of the server service
-pub async fn run(public_port: u16, client_port: u16) {
+pub async fn run(root_host: String, public_port: u16, client_port: u16) {
     validate_configs();
     // init instances
-    let root_host = "localhost"; // TODO: localhost for testing, considering "0.0.0.0" later for other usecases
     let public_listener = TcpListener::bind(format!("{}:{}", root_host, public_port)).await.unwrap();
     let client_listener = TcpListener::bind(format!("{}:{}", root_host, client_port)).await.unwrap();
     let redis_store = RedisDataStore::new().unwrap();

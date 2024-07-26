@@ -34,7 +34,7 @@ Soon
 ## Features
 - Basic HTTP Tunneling.
 - All utilities in one binary file.
-- A **Service Serrvice** could handle multiple **Client Services**.
+- A **Service Service** could handle multiple **Client Services**.
 - Many more soon.
 ### Logs
 Soon

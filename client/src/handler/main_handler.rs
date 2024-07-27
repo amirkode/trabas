@@ -1,22 +1,25 @@
 // TODO: implement this
 
-use std::{sync::Arc, time::Duration};
+use std::{cell::RefCell, sync::Arc, time::Duration};
 
 use http::StatusCode;
 
 use common::{
     convert::{from_json_slice, to_json_vec}, 
     data::dto::{public_request::PublicRequest, public_response::PublicResponse, tunnel_client::TunnelClient}, 
-    net::{ack_health_check_packet, http_json_response_as_bytes, read_bytes_from_mutexed_socket, read_string_from_socket, HttpResponse}, 
+    net::{ack_health_check_packet, http_json_response_as_bytes, read_bytes_from_mutexed_socket, read_string_from_socket, HttpResponse, TcpStreamTLS}, 
     security::sign_value
 };
 use tokio::{io::AsyncWriteExt, net::TcpStream, sync::Mutex, time::{sleep, Instant}};
 use log::{error, info};
+use tokio_native_tls::{native_tls, TlsConnector};
 
-use crate::{config, service::underlying_service::UnderlyingService};
+use crate::{config::{self, get_ca_certificate}, service::underlying_service::UnderlyingService};
 
-pub async fn register_handler(underlying_host: String, service: UnderlyingService) -> () {
+pub async fn register_handler(underlying_host: String, service: UnderlyingService, use_tls: bool) -> () {
     let server_host = std::env::var(config::CONFIG_KEY_CLIENT_SERVER_HOST).unwrap_or_default();
+    let server_port = std::env::var(config::CONFIG_KEY_CLIENT_SERVER_PORT).unwrap_or_default();
+    let server_address = format!("{}:{}", server_host, server_port);
     // is one thousands a good enough limit (?)
     let mut max_tries = 1000;
     while max_tries > 0 {
@@ -28,15 +31,33 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
 
         max_tries -= 1;
 
-        info!("Binding to server service: {}", server_host.clone()); 
-        let mut stream = match TcpStream::connect(server_host.clone()).await {
+        info!("Binding to server service: {}", server_address.clone()); 
+        let tcp_stream = match TcpStream::connect(server_address.clone()).await {
             Ok(ok) => ok,
             Err(e) => {
                 error!("Error connecting to {}: {}", server_host, e);
                 continue;
             }
         };
-
+        let mut stream = if use_tls {
+            let cert = get_ca_certificate().unwrap();
+            let connector = native_tls::TlsConnector::builder()
+                .add_root_certificate(cert)
+                .build()
+                .unwrap();
+            let connector = TlsConnector::from(connector);
+            let tls_stream = connector.connect(server_host.as_str(), tcp_stream).await.unwrap();
+            info!("TLS Bound -> address: {}, host: {}", server_address.clone(), server_host.clone());
+            TcpStreamTLS {
+                tcp: None,
+                tls: Some(tls_stream)
+            }
+        } else { 
+            TcpStreamTLS {
+                tcp: Some(tcp_stream),
+                tls: None
+            }
+         };
         // send connection request to server service
         let tunnel_client = get_tunnel_client();
         let bytes_req = to_json_vec(&tunnel_client);
@@ -75,7 +96,7 @@ fn get_tunnel_client() -> TunnelClient {
     TunnelClient::new(client_id, signature)
 }
 
-pub async fn tunnel_handler(stream: Arc<Mutex<TcpStream>>, underlying_host: String, service: UnderlyingService) {
+pub async fn tunnel_handler(stream: Arc<Mutex<TcpStreamTLS>>, underlying_host: String, service: UnderlyingService) {
     info!("Tunnel handler started.");
     loop {
         // get incoming request server service to forward

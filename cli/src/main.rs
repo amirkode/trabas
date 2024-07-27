@@ -26,6 +26,7 @@ enum Commands {
 // config arg keys for client
 const CONFIG_ARG_CL_ID: &str = "client-id";
 const CONFIG_ARG_CL_SERVER_HOST: &str = "server-host";
+const CONFIG_ARG_CL_SERVER_PORT: &str = "server-port";
 const CONFIG_ARG_CL_SERVER_SIGNING_KEY: &str = "server-signing-key";
 
 // config arg keys for server
@@ -42,6 +43,8 @@ enum ClientActions {
         host: Option<String>,
         #[arg(long, default_value_t = 3000)]
         port: u16,
+        #[arg(long)]
+        tls: bool,
     },
     SetConfig {
         #[arg(
@@ -56,6 +59,12 @@ enum ClientActions {
             help="Server Host for tunneling"
         )]
         server_host: Option<String>,
+        #[arg(
+            name = CONFIG_ARG_CL_SERVER_PORT, 
+            long,
+            help="Server Port for tunneling"
+        )]
+        server_port: Option<u16>,
         #[arg(
             name = CONFIG_ARG_CL_SERVER_SIGNING_KEY, 
             long,
@@ -74,11 +83,11 @@ enum ClientActions {
 #[derive(Subcommand)]
 enum ServerActions {
     Run {
-        #[arg(short, long)]
+        #[arg(long)]
         host: Option<String>,
-        #[arg(short, long, default_value_t = 8000)]
+        #[arg(long, default_value_t = 8000)]
         public_port: u16,
-        #[arg(short, long, default_value_t = 8000)]
+        #[arg(long, default_value_t = 8000)]
         client_port: u16,
     },
     SetConfig {
@@ -130,18 +139,19 @@ async fn main() {
     
     match &cli.command {
         Commands::Client { action } => match action {
-            ClientActions::Serve { host, port } => {
-                client::serve((*host).clone(), *port).await;
+            ClientActions::Serve { host, port , tls } => {
+                client::serve((*host).clone(), *port, *tls).await;
             },
-            ClientActions::SetConfig { client_id, server_host, server_signing_key, force } => {
+            ClientActions::SetConfig { client_id, server_host, server_port, server_signing_key, force } => {
                 if client_id.is_none() && server_host.is_none() && server_signing_key.is_none() {
                     let mut cmd = Cli::command();
                     cmd.error(
                         ErrorKind::MissingRequiredArgument,
                         format!(
-                            "At least one of --{}, --{}, or --{} must be provided",
+                            "At least one of --{}, --{}, --{}, or --{} must be provided",
                             CONFIG_ARG_CL_ID,
                             CONFIG_ARG_CL_SERVER_HOST,
+                            CONFIG_ARG_CL_SERVER_PORT,
                             CONFIG_ARG_CL_SERVER_SIGNING_KEY
                         )
                     ).exit();
@@ -153,6 +163,10 @@ async fn main() {
 
                 if let Some(value) = server_host {
                     client::config::set_server_host((*value).clone(), *force)
+                }
+
+                if let Some(value) = server_port {
+                    client::config::set_server_port(*value, *force)
                 }
 
                 if let Some(value) = server_signing_key {

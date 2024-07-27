@@ -4,6 +4,7 @@ FROM rust:latest
 RUN apt-get update && apt-get install -y \
     git \
     redis-server \
+    dos2unix \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
@@ -19,8 +20,9 @@ RUN mkdir -p /install/bin \
 
 # copy the entry point
 COPY entrypoint.sh /install/entrypoint.sh
+# fix file system esp: build from windows
+RUN dos2unix /install/entrypoint.sh
 RUN chmod +x /install/entrypoint.sh
-ENV REDIS_PORT=6379
 
 # expose the public service port
 EXPOSE 8787

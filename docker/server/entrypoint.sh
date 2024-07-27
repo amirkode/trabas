@@ -1,9 +1,9 @@
 #!/bin/sh
 
 # init redis env
-export REDIS_HOST=${REDIS_HOST:-127.0.0.1}
-export REDIS_PORT=${REDIS_PORT:-6379}
-export REDIS_PASS=${REDIS_PASS:-serverpass}
+export REDIS_HOST=127.0.0.1
+export REDIS_PORT=6379
+export REDIS_PASS=serverpass
 
 # init configs
 /install/bin/trabas server set-config --gen-key --redis-host $REDIS_HOST --redis-port $REDIS_PORT --redis-pass $REDIS_PASS

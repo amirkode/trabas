@@ -11,7 +11,7 @@ pub mod data;
 pub mod handler; 
 pub mod service;
 
-pub async fn serve(host: Option<String>, port: u16) {
+pub async fn serve(host: Option<String>, port: u16, use_tls: bool) {
     validate_configs();
     
     let underlying_host = match host {
@@ -24,7 +24,7 @@ pub async fn serve(host: Option<String>, port: u16) {
     let underlying_service = UnderlyingService::new(Arc::new(underlying_repo));
 
     // register handler
-    register_handler(underlying_host, underlying_service).await;
+    register_handler(underlying_host, underlying_service, use_tls).await;
 
     info!("Client Service Stopped");
 }

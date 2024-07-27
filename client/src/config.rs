@@ -1,14 +1,18 @@
 use std::collections::HashMap;
+use std::fs;
 
 use rand::{thread_rng, Rng};
 use rand::distributions::Alphanumeric;
 use mac_address::get_mac_address; 
+use tokio_native_tls::native_tls::Certificate;
 
-use common::config::{get_config, set_configs};
+use common::config::{get_config, get_config_path, set_configs};
 
 pub const CONFIG_KEY_CLIENT_ID: &str = "CL_ID";
 pub const CONFIG_KEY_CLIENT_SERVER_HOST: &str = "CL_SERVER_HOST";
+pub const CONFIG_KEY_CLIENT_SERVER_PORT: &str = "CL_SERVER_PORT";
 pub const CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY: &str = "CL_SERVER_SIGNING_KEY";
+pub const CONFIG_CA_FILE_NAME: &str = "ca.crt";
 
 // simple validation for config keys
 pub fn validate_configs() {
@@ -112,4 +116,32 @@ pub fn set_server_host(value: String, force: bool) -> () {
     println!("Server Host has been set!");
     println!("Value: {}", value);
     println!("You may find the value later again in the config file")   
+}
+
+pub fn set_server_port(value: u16, force: bool) -> () {
+    // check whether the server host is already set
+    let config = get_config();
+    if config.contains_key(CONFIG_KEY_CLIENT_SERVER_PORT) && !force {
+        println!("Server Port is already set, please check it in the config file. Consider using --force option to force resetting");
+        return;
+    }
+
+    set_configs(HashMap::from([
+        (String::from(CONFIG_KEY_CLIENT_SERVER_PORT), format!("{}", value))
+    ]));
+
+    println!("Server Port has been set!");
+    println!("Value: {}", value);
+    println!("You may find the value later again in the config file")   
+}
+
+// get CA certificate for TLS connection
+pub fn get_ca_certificate() -> Result<Certificate, String> {
+    let config_path = get_config_path();
+    let ca_path = format!("{}/{}", config_path, CONFIG_CA_FILE_NAME);
+    let ca_data = fs::read(ca_path)
+        .map_err(|e| format!("Error reading CA file: {}",  e))?;
+    let ca = Certificate::from_pem(&ca_data)
+        .map_err(|e| format!("Error loading Certificate: {}",  e))?;
+    Ok(ca)
 }

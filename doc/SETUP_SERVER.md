@@ -40,6 +40,7 @@ foo@bar:~$ openssl req -x509 -new -nodes -key ca.key -sha256 -days 3650 -out ca.
 ```
 
 _Generate Server Certificate signed by the CA_
+
 Create a private key for CA:
 ```console
 foo@bar:~$ openssl genrsa -out server.key 2048

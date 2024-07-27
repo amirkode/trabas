@@ -20,7 +20,6 @@ RUN mkdir -p /install/bin \
 # copy the entry point
 COPY entrypoint.sh /install/entrypoint.sh
 RUN chmod +x /install/entrypoint.sh
-ENV REDIS_PORT=6379
 
 # expose the public service port
 EXPOSE 8787

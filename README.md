@@ -23,7 +23,7 @@ To use the tool, you can use the all-in-one binary available from the latest rel
 Alternatively, you may to build binary file using cargo:
 ```bash
 git clone https://github.com/amirkode/trabas.git && cd trabas
-RUN cargo build --release --manifest-path cli/Cargo.toml
+cargo build --release --manifest-path cli/Cargo.toml
 ```
 you can find the built binary in `target/release/trabas`.
 
@@ -40,7 +40,7 @@ this starts the public request and client service listeners.
 
 **Client Service**
 
-Initialize the config as mentioned [here](https://github.com/amirkode/trabas/blob/main/doc/CONFIG.md).
+Initialize the config as mentioned [here](https://github.com/amirkode/trabas/blob/main/doc/CONFIG.md). Start the service:
 ```console
 foo@bar:~$ trabas client serve --host localhost --port 3000
 ```

@@ -1,16 +1,19 @@
 use chrono::Utc;
 use common::convert::{parse_request_bytes, request_to_bytes, response_to_bytes};
-use common::net::{http_json_response_as_bytes, read_bytes_from_socket, HttpResponse};
+use common::net::{http_json_response_as_bytes, read_bytes_from_socket, HttpResponse, TcpStreamTLS};
 use hex;
 use log::{error, info};
 use sha2::{Sha256, Digest};
 use http::{Request, StatusCode, Uri};
-use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use common::data::dto::public_request::PublicRequest;
 use crate::service::public_service::PublicService;
 
 pub async fn register_public_handler(stream: TcpStream, service: PublicService) {
+    let stream = TcpStreamTLS {
+        tcp: Some(stream),
+        tls: None
+    };
     tokio::spawn(async move {
         public_handler(stream, service).await;
     });
@@ -18,7 +21,7 @@ pub async fn register_public_handler(stream: TcpStream, service: PublicService) 
 
 // handling public request up to receive a response
 // TODO: implement error responses
-async fn public_handler(mut stream: TcpStream, service: PublicService) -> () {
+async fn public_handler(mut stream: TcpStreamTLS, service: PublicService) -> () {
     info!("Tunnel handler started.");
     // read data as bytes
     let mut raw_request = Vec::new();

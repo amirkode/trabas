@@ -1,6 +1,6 @@
 
 use common::convert::{from_json_slice, to_json_vec};
-use common::net::{read_bytes_from_mutexed_socket, read_bytes_from_socket, send_health_check_packet};
+use common::net::{read_bytes_from_mutexed_socket, read_bytes_from_socket, send_health_check_packet, TcpStreamTLS};
 use common::validate_signature;
 use log::{error, info};
 use tokio::io::AsyncWriteExt;
@@ -16,6 +16,10 @@ use crate::service::public_service::PublicService;
 
 pub async fn register_tunnel_handler(mut stream: TcpStream, client_service: ClientService, public_service: PublicService) -> () {
     info!("Pending connection");
+    let mut stream = TcpStreamTLS {
+        tcp: Some(stream),
+        tls: None
+    };
     // register client ID
     let mut raw_response = Vec::new();
     if let Err(e) = read_bytes_from_socket(&mut stream, &mut raw_response).await {
@@ -97,7 +101,7 @@ async fn connection_checker(stream_dc: Arc<Mutex<bool>>, service: Arc<Mutex<Clie
     }
 }
 
-async fn tunnel_handler(stream: Arc<Mutex<TcpStream>>, public_service: Arc<Mutex<PublicService>>, client_service: Arc<Mutex<ClientService>>, client_id: String) {
+async fn tunnel_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_service: Arc<Mutex<PublicService>>, client_service: Arc<Mutex<ClientService>>, client_id: String) {
     info!("Tunnel handler started.");
     loop {
         // request from the queue
@@ -160,7 +164,7 @@ async fn tunnel_handler(stream: Arc<Mutex<TcpStream>>, public_service: Arc<Mutex
     info!("Client Disconnected. client_id: {}", client_id);
 }
 
-async fn receiver_handler(stream_dc: Arc<Mutex<bool>>, stream: Arc<Mutex<TcpStream>>, service: Arc<Mutex<PublicService>>) {
+async fn receiver_handler(stream_dc: Arc<Mutex<bool>>, stream: Arc<Mutex<TcpStreamTLS>>, service: Arc<Mutex<PublicService>>) {
     info!("Receiver handler started.");
     loop {
         // check stream connection

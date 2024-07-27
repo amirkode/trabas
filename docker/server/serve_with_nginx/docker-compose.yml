@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "3377:3377"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    restart: always

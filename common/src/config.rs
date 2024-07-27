@@ -8,7 +8,7 @@ use std::path::Path;
 const CONFIG_PATH: &str = "trabas_config";
 const CONFIG_ENV: &str = ".env";
 
-fn get_config_path() -> String {
+pub fn get_config_path() -> String {
     let root_path = env::current_exe().unwrap().parent().unwrap().to_string_lossy().to_string();
     format!("{}/{}", root_path, CONFIG_PATH)
 }

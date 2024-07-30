@@ -1,4 +1,4 @@
-use std::{cell::RefCell, future::Future, pin::Pin, sync::Arc, task::{Context, Poll}};
+use std::{future::Future, pin::Pin, sync::Arc, task::{Context, Poll}};
 
 use futures::io;
 use http::{Response, StatusCode, Version};
@@ -19,6 +19,20 @@ pub struct TcpStreamTLS {
 }
 
 impl TcpStreamTLS {
+    pub fn from_tcp(tcp: TcpStream) -> Self {
+        TcpStreamTLS {
+            tcp: Some(tcp),
+            tls: None
+        }
+    }
+
+    pub fn from_tls(tls: TlsStream<TcpStream>) -> Self {
+        TcpStreamTLS {
+            tcp: None,
+            tls: Some(tls)
+        }
+    }
+
     pub fn use_tls(&self) -> bool {
         self.tls.is_some()
     }
@@ -61,6 +75,8 @@ pub async fn send_health_check_packet(stream: Arc<Mutex<TcpStreamTLS>>) -> Resul
     Ok(())
 }
 
+// TODO: reading readiness using poll ready state might be a good option (?)
+// but it does not seem to be reliable for checking e2e connection
 async fn is_socket_readable(stream: &mut TcpStream) -> bool {
     struct ReadReady<'a>(&'a mut TcpStream);
 
@@ -81,9 +97,10 @@ pub async fn read_bytes_from_socket(stream: &mut TcpStreamTLS, res: &mut Vec<u8>
         let n = stream.read(&mut buffer).await
             .map_err(|e| format!("Error reading socket: {}",  e))?;
 
-        if n == 0 {
-            return Err(String::from("Error reading socket: Connection closed"));
-        }
+        // TODO: check this again, not really sure if it's useful
+        // if n == 0 {
+        //     return Err(String::from("Error reading socket: Connection closed"));
+        // }
 
         res.extend_from_slice(&buffer[..n]);
         if res.windows(4).any(|window| window == b"\r\n\r\n") || n < buffer.len() {
@@ -100,9 +117,6 @@ pub async fn read_bytes_from_mutexed_socket(stream: Arc<Mutex<TcpStreamTLS>>, re
     loop {
         let n = stream.lock().await.read(&mut buffer).await
             .map_err(|e| format!("Error reading socket: {}",  e))?;
-        if n == 0 {
-            return Err(String::from("Error reading socket: Connection closed"));
-        }
 
         res.extend_from_slice(&buffer[..n]);
         if res.windows(4).any(|window| window == b"\r\n\r\n") || n < buffer.len() {

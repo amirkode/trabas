@@ -10,12 +10,8 @@ use common::data::dto::public_request::PublicRequest;
 use crate::service::public_service::PublicService;
 
 pub async fn register_public_handler(stream: TcpStream, service: PublicService) {
-    let stream = TcpStreamTLS {
-        tcp: Some(stream),
-        tls: None
-    };
     tokio::spawn(async move {
-        public_handler(stream, service).await;
+        public_handler(TcpStreamTLS::from_tcp(stream), service).await;
     });
 }
 

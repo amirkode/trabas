@@ -47,7 +47,7 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
                 .unwrap();
             let connector = TlsConnector::from(connector);
             let tls_stream = connector.connect(server_host.as_str(), tcp_stream).await.unwrap();
-            info!("TLS Bound -> address: {}, host: {}", server_address.clone(), server_host.clone());
+            info!("TLS Bound -> address: {}", server_address.clone());
             TcpStreamTLS {
                 tcp: None,
                 tls: Some(tls_stream)

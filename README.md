@@ -48,7 +48,7 @@ this starts the public request and client service listeners.
 
 **Deployment**
 
-For remote server deployment, minimal config as mentioned earlier is adequate for testing purpose. But, you may secure the data exchange between client service and server service though TLS connection. The well-rounded example can be found [here](https://github.com/amirkode/trabas/blob/main/doc/CONFIG.md).
+For remote server deployment, minimal config as mentioned earlier is adequate for testing purpose. But, you may secure the data exchange between client service and server service through TLS connection. The well-rounded example can be found [here](https://github.com/amirkode/trabas/blob/main/doc/CONFIG.md).
 
 ## Demo
 Soon

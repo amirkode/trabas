@@ -140,7 +140,7 @@ async fn main() {
     match &cli.command {
         Commands::Client { action } => match action {
             ClientActions::Serve { host, port , tls } => {
-                client::serve((*host).clone(), *port, *tls).await;
+                client::entry_point((*host).clone(), *port, *tls).await;
             },
             ClientActions::SetConfig { client_id, server_host, server_port, server_signing_key, force } => {
                 if client_id.is_none() && server_host.is_none() && server_signing_key.is_none() {
@@ -180,7 +180,7 @@ async fn main() {
                     Some(value) => (*value).clone(),
                     None => String::from("127.0.0.1")
                 };
-                server::run(root_host,*public_port, *client_port).await
+                server::entry_point(root_host,*public_port, *client_port).await
             },
             ServerActions::SetConfig { gen_key, redis_host, redis_port, redis_pass, force } => {
                 if gen_key.is_none() && redis_host.is_none() && redis_port.is_none() && redis_pass.is_none() {

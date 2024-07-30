@@ -1,6 +1,6 @@
 // TODO: implement this
 
-use std::{cell::RefCell, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use http::StatusCode;
 
@@ -10,7 +10,7 @@ use common::{
     net::{ack_health_check_packet, http_json_response_as_bytes, read_bytes_from_mutexed_socket, read_string_from_socket, HttpResponse, TcpStreamTLS}, 
     security::sign_value
 };
-use tokio::{io::AsyncWriteExt, net::TcpStream, sync::Mutex, time::{sleep, Instant}};
+use tokio::{net::TcpStream, sync::Mutex, time::{sleep, Instant}};
 use log::{error, info};
 use tokio_native_tls::{native_tls, TlsConnector};
 
@@ -47,7 +47,7 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
                 .unwrap();
             let connector = TlsConnector::from(connector);
             let tls_stream = connector.connect(server_host.as_str(), tcp_stream).await.unwrap();
-            info!("TLS Bound -> address: {}, host: {}", server_address.clone(), server_host.clone());
+            info!("TLS Bound -> address: {}", server_address.clone());
             TcpStreamTLS {
                 tcp: None,
                 tls: Some(tls_stream)

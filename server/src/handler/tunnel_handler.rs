@@ -4,7 +4,9 @@ use common::net::{read_bytes_from_mutexed_socket, read_bytes_from_socket, send_h
 use common::validate_signature;
 use log::{error, info};
 use tokio::net::TcpStream;
+use tokio::time::sleep;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 use common::data::dto::public_response::PublicResponse;
 use common::data::dto::tunnel_client::TunnelClient;
@@ -67,6 +69,8 @@ fn validate_connection(signature: String, client_id: String) -> bool {
 
 async fn tunnel_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_service: Arc<Mutex<PublicService>>, client_service: Arc<Mutex<ClientService>>, client_id: String) {
     info!("Tunnel handler started.");
+    // sleep for 1 seconds to prevent race condition with healthcheck packet
+    sleep(Duration::from_secs(1)).await;
     loop {
         // request from the queue
         let raw_request = public_service.lock().await.dequeue_request(client_id.clone()).await;

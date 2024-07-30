@@ -1,6 +1,6 @@
 // TODO: implement this
 
-use std::{cell::RefCell, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use http::StatusCode;
 
@@ -10,7 +10,7 @@ use common::{
     net::{ack_health_check_packet, http_json_response_as_bytes, read_bytes_from_mutexed_socket, read_string_from_socket, HttpResponse, TcpStreamTLS}, 
     security::sign_value
 };
-use tokio::{io::AsyncWriteExt, net::TcpStream, sync::Mutex, time::{sleep, Instant}};
+use tokio::{net::TcpStream, sync::Mutex, time::{sleep, Instant}};
 use log::{error, info};
 use tokio_native_tls::{native_tls, TlsConnector};
 

@@ -32,10 +32,17 @@ async fn public_handler(mut stream: TcpStreamTLS, service: PublicService) -> () 
     let request = match parse_request_bytes(&raw_request) {
         Some(value) => value,
         None => {
-            let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\noeieiei!";
+            let msg = "Parsing on empty request";
+            let response = match http_json_response_as_bytes(
+            HttpResponse::new(false, String::from(msg)), StatusCode::from_u16(400).unwrap()) {
+                Ok(value) => value,
+                Err(_) => {
+                    return;
+                } 
+            };
 
-            stream.write_all(response.as_bytes()).await.unwrap();
-            error!("Parsing on empty request");
+            error!("{}", msg);
+            stream.write_all(&response).await.unwrap();
             return;
         }   
     };
@@ -45,12 +52,12 @@ async fn public_handler(mut stream: TcpStreamTLS, service: PublicService) -> () 
         Err(msg) => {
             error!("{}", msg);
             let response = match http_json_response_as_bytes(
-                HttpResponse::new(false, msg), StatusCode::from_u16(400).unwrap()) {
-                    Ok(value) => value,
-                    Err(_) => {
-                        return;
-                    } 
-                };
+            HttpResponse::new(false, msg), StatusCode::from_u16(400).unwrap()) {
+                Ok(value) => value,
+                Err(_) => {
+                    return;
+                } 
+            };
 
             stream.write_all(&response).await.unwrap();
             // stream.shutdown().await.unwrap();

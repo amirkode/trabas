@@ -8,6 +8,10 @@ use std::path::Path;
 const CONFIG_PATH: &str = "trabas_config";
 const CONFIG_ENV: &str = ".env";
 
+// TODO: should we make a config interface for both client and server (?)
+// and to be injected across the usecases (?)
+// for now, sharing config/env using std::env is a decent solution
+
 pub fn get_config_path() -> String {
     let root_path = env::current_exe().unwrap().parent().unwrap().to_string_lossy().to_string();
     format!("{}/{}", root_path, CONFIG_PATH)

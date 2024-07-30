@@ -169,3 +169,18 @@ pub fn http_json_response_as_bytes(response: HttpResponse, status: StatusCode) -
 
     Ok(response_to_bytes(&res))
 }
+
+// returns string response for http request
+pub fn http_string_response_as_bytes(response: String, status: StatusCode) -> Result<Vec<u8>, String> {
+    let res_bytes = response.as_bytes();
+    let content_length = res_bytes.len();
+    let res = Response::builder()
+        .version(Version::HTTP_11)
+        .status(status)
+        .header("Content-Type", "application/json")
+        .header("Content-Length", content_length.to_string())
+        .body(Vec::from(res_bytes))
+        .map_err(|e| format!("Error building json response: {}", e))?;
+
+    Ok(response_to_bytes(&res))
+}

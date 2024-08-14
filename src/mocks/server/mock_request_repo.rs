@@ -7,13 +7,15 @@ use tokio::sync::Mutex;
 
 
 pub struct MockRequestRepo {
-    mock_data: Arc<Mutex<VecDeque<PublicRequest>>>
+    mock_data: Arc<Mutex<VecDeque<PublicRequest>>>,
+    request_limit: u16
 }
 
 impl MockRequestRepo {
-    pub fn new() -> Self {
+    pub fn new(request_limit: u16) -> Self {
         MockRequestRepo {
-            mock_data: Arc::new(Mutex::new(VecDeque::new()))
+            mock_data: Arc::new(Mutex::new(VecDeque::new())),
+            request_limit
         }
     }
 }
@@ -21,6 +23,10 @@ impl MockRequestRepo {
 #[async_trait]
 impl RequestRepo for MockRequestRepo {
     async fn push_back(&self, request: PublicRequest) -> Result<(), String> {
+        if self.request_limit > 0 && self.mock_data.lock().await.len() as u16 > self.request_limit {
+            return Err(String::from("Max request limit has been reached."))
+        }
+
         self.mock_data.lock().await.push_back(request);
         Ok(())
     }

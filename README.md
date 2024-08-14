@@ -7,6 +7,7 @@ Trabas is an (ngrok-like inspired) HTTP tunneling written in Rust utilizing stan
 - Basic HTTP Tunneling.
 - All utilities in one binary file.
 - A **Service Service** could handle multiple **Client Services**.
+- Rate Limiter.
 - Many more soon.
 
 ## Usage
@@ -36,7 +37,7 @@ Start the service:
 ```console
 foo@bar:~$ trabas server run --public-port 8001 --client-port 8002
 ```
-this starts the public request and client service listeners.
+this starts the public request and client service listeners. You may want to limit the number of requests in a time for every request to each client service, just pass the `--client-request-limit [your value]` argument.
 
 **Client Service**
 
@@ -48,7 +49,7 @@ this starts the public request and client service listeners.
 
 **Deployment**
 
-For remote server deployment, minimal config as mentioned earlier is adequate for testing purpose. But, you may secure the data exchange between client service and server service through TLS connection. The well-rounded example can be found [here](https://github.com/amirkode/trabas/blob/main/doc/CONFIG.md).
+For remote server deployment, minimal config as mentioned earlier is adequate for testing purpose. But, you may secure the data exchange between client service and server service through TLS connection. The well-rounded example can be found [here](https://github.com/amirkode/trabas/blob/main/doc/SETUP_SERVER.md).
 
 ## Demo
 Soon

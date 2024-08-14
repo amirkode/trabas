@@ -37,7 +37,7 @@ Start the service:
 ```console
 foo@bar:~$ trabas server run --public-port 8001 --client-port 8002
 ```
-this starts the public request and client service listeners. You may want to limit the number request in a time for every request to each client service, just pass `--client-request-limit [your value]` argument.
+this starts the public request and client service listeners. You may want to limit the number of requests in a time for every request to each client service, just pass the `--client-request-limit [your value]` argument.
 
 **Client Service**
 

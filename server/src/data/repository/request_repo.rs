@@ -11,12 +11,13 @@ pub trait RequestRepo {
 }
 
 pub struct RequestRepoImpl {
-    connection: MultiplexedConnection
+    connection: MultiplexedConnection,
+    request_limit: u16
 }
 
 impl RequestRepoImpl {
-    pub fn new(connection: MultiplexedConnection) -> Self {
-        RequestRepoImpl { connection }
+    pub fn new(connection: MultiplexedConnection, request_limit: u16) -> Self {
+        RequestRepoImpl { connection, request_limit }
     }
 }
 
@@ -25,6 +26,15 @@ impl RequestRepo for RequestRepoImpl {
     async fn push_back(&self, request: PublicRequest) -> Result<(), String> {
         let data = to_json_vec(&request);
         let key = format!("{}_{}", REDIS_KEY_PUBLIC_REQUEST, request.client_id);
+        // if the request limit is set, the queue len must be checked
+        if self.request_limit > 0 {
+            let queue_len: u16 = self.connection.clone().llen(key.clone()).await
+            .map_err(|e| format!("Error pushing request {}: {}", request.id, e))?;
+            if queue_len > self.request_limit {
+                return Err(String::from("Max request limit has been reached"))
+            }
+        }
+
         self.connection.clone().lpush(key, &data).await
             .map_err(|e| format!("Error pushing request {}: {}", request.id, e))?;
         Ok(())

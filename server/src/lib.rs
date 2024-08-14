@@ -20,9 +20,11 @@ use service::public_service::PublicService;
 use tokio::net::TcpListener;
 
 // entry point of the server service
-pub async fn entry_point(root_host: String, 
+pub async fn entry_point(
+    root_host: String, 
     public_port: u16, 
     client_port: u16,
+    client_request_limit: u16,
 ) {
     validate_configs();
     let public_svc_address = format!("{}:{}", root_host, public_port);
@@ -31,7 +33,7 @@ pub async fn entry_point(root_host: String,
     let redis_store = RedisDataStore::new().unwrap();
     let redis_connection = redis_store.client.get_multiplexed_async_connection().await.unwrap();
     let client_repo = Arc::new(ClientRepoImpl::new(redis_connection.clone()));
-    let request_repo = Arc::new(RequestRepoImpl::new(redis_connection.clone()));
+    let request_repo = Arc::new(RequestRepoImpl::new(redis_connection.clone(), client_request_limit));
     let response_repo = Arc::new(ResponseRepoImpl::new(redis_connection.clone()));
     // run the services
     run(

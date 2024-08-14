@@ -17,6 +17,7 @@ use tokio_native_tls::{native_tls, TlsConnector};
 use crate::{config::{self, get_ca_certificate}, service::underlying_service::UnderlyingService};
 
 pub async fn register_handler(underlying_host: String, service: UnderlyingService, use_tls: bool) -> () {
+    // TODO: add initial connection validation for underlying service
     let server_host = std::env::var(config::CONFIG_KEY_CLIENT_SERVER_HOST).unwrap_or_default();
     let server_port = std::env::var(config::CONFIG_KEY_CLIENT_SERVER_PORT).unwrap_or_default();
     let server_address = format!("{}:{}", server_host, server_port);

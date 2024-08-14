@@ -75,7 +75,18 @@ async fn public_handler(mut stream: TcpStreamTLS, service: PublicService) -> () 
     };
 
     // enqueue the request to redis
-    service.enqueue_request(public_request).await.unwrap();
+    if let Err(e) = service.enqueue_request(public_request).await {
+        let response = match http_json_response_as_bytes(
+        HttpResponse::new(false, e), StatusCode::from_u16(503).unwrap()) {
+            Ok(value) => value,
+            Err(_) => {
+                return;
+            } 
+        };
+
+        stream.write_all(&response).await.unwrap();
+        return;
+    };
 
     info!("Public Request: {} was enqueued.", request_id.clone());
     

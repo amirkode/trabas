@@ -1622,6 +1622,7 @@ dependencies = [
  "common",
  "env_logger",
  "http",
+ "log",
  "reqwest",
  "server",
  "tokio",

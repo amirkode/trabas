@@ -91,7 +91,7 @@ enum ServerActions {
         client_port: u16,
         // max number of requests in a time per client across service-wide
         #[arg(long)]
-        client_request_limit: u16,
+        client_request_limit: Option<u16>,
     },
     SetConfig {
         #[arg(
@@ -146,7 +146,7 @@ async fn main() {
                 client::entry_point((*host).clone(), *port, *tls).await;
             },
             ClientActions::SetConfig { client_id, server_host, server_port, server_signing_key, force } => {
-                if client_id.is_none() && server_host.is_none() && server_signing_key.is_none() {
+                if client_id.is_none() && server_host.is_none() && server_port.is_none() && server_signing_key.is_none() {
                     let mut cmd = Cli::command();
                     cmd.error(
                         ErrorKind::MissingRequiredArgument,
@@ -179,12 +179,15 @@ async fn main() {
         },
         Commands::Server { action } => match action {
             ServerActions::Run { host, public_port, client_port,  client_request_limit} => {
-                // TODO: implement request limiter
                 let root_host = match host {
                     Some(value) => (*value).clone(),
                     None => String::from("127.0.0.1")
                 };
-                server::entry_point(root_host,*public_port, *client_port, *client_request_limit).await
+                let client_request_limit = match client_request_limit {
+                    Some(value) => *value,
+                    None => 0
+                };
+                server::entry_point(root_host,*public_port, *client_port, client_request_limit).await
             },
             ServerActions::SetConfig { gen_key, redis_host, redis_port, redis_pass, force } => {
                 if gen_key.is_none() && redis_host.is_none() && redis_port.is_none() && redis_pass.is_none() {

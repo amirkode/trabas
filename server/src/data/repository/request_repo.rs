@@ -16,7 +16,6 @@ pub trait RequestRepo {
 
 pub struct RequestRepoImpl {
     connection: MultiplexedConnection,
-    
 }
 
 impl RequestRepoImpl {

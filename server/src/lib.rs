@@ -33,12 +33,13 @@ pub async fn entry_point(
     let redis_store = RedisDataStore::new().unwrap();
     let redis_connection = redis_store.client.get_multiplexed_async_connection().await.unwrap();
     let client_repo = Arc::new(ClientRepoImpl::new(redis_connection.clone()));
-    let request_repo = Arc::new(RequestRepoImpl::new(redis_connection.clone(), client_request_limit));
+    let request_repo = Arc::new(RequestRepoImpl::new(redis_connection.clone()));
     let response_repo = Arc::new(ResponseRepoImpl::new(redis_connection.clone()));
     // run the services
     run(
         public_svc_address,
         client_svc_address,
+        client_request_limit,
         client_repo,
         request_repo,
         response_repo
@@ -48,6 +49,7 @@ pub async fn entry_point(
 pub async fn run(
     public_svc_address: String,
     client_svc_address: String,
+    client_request_limit: u16,
     client_repo: Arc<dyn ClientRepo + Send + Sync>,
     request_repo: Arc<dyn RequestRepo + Send + Sync>,
     response_repo: Arc<dyn ResponseRepo + Send + Sync>
@@ -56,7 +58,7 @@ pub async fn run(
     let public_listener = TcpListener::bind(public_svc_address).await.unwrap();
     let client_listener = TcpListener::bind(client_svc_address).await.unwrap();
     let client_service = ClientService::new(client_repo);
-    let public_service = PublicService::new(request_repo, response_repo);
+    let public_service = PublicService::new(request_repo, response_repo, client_request_limit);
 
     info!("[Public Listerner] Listening on :{}", public_listener.local_addr().unwrap());
     info!("[Client Listerner] Listening on :{}", client_listener.local_addr().unwrap());

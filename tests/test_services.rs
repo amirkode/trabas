@@ -56,12 +56,12 @@ async fn test_e2e_request_flow() {
 
     // start server service
     let client_repo = Arc::new(MockClientRepo::new());
-    let request_repo = Arc::new(MockRequestRepo::new(0));
+    let request_repo = Arc::new(MockRequestRepo::new());
     let response_repo = Arc::new(MockResponseRepo::new());
     let public_svc_address = String::from("127.0.0.1:3333");
     let client_svc_address = String::from("127.0.0.1:3334");
     let server_exec = tokio::spawn(async move {
-        server::run(public_svc_address, client_svc_address, client_repo, request_repo, response_repo).await;
+        server::run(public_svc_address, client_svc_address, 0, client_repo, request_repo, response_repo).await;
     });
 
     // delay for 2 seconds to wait the server to start up
@@ -105,12 +105,12 @@ async fn test_e2e_request_flow_with_request_limit() {
     // start server service
     let request_limit: u16 = 5;
     let client_repo = Arc::new(MockClientRepo::new());
-    let request_repo = Arc::new(MockRequestRepo::new(request_limit));
+    let request_repo = Arc::new(MockRequestRepo::new());
     let response_repo = Arc::new(MockResponseRepo::new());
     let public_svc_address = String::from("127.0.0.1:3333");
     let client_svc_address = String::from("127.0.0.1:3334");
     let server_exec = tokio::spawn(async move {
-        server::run(public_svc_address, client_svc_address, client_repo, request_repo, response_repo).await;
+        server::run(public_svc_address, client_svc_address, request_limit, client_repo, request_repo, response_repo).await;
     });
 
     // delay for 2 seconds to wait the server to start up
@@ -159,7 +159,7 @@ async fn test_e2e_request_flow_with_request_limit() {
     }
 
     let success_cnt = responses.lock().await.len();
-    info!("Success count: {}", success_cnt);
+    info!("Request success count: {}", success_cnt);
     assert!(success_cnt < request_cnt);
 
     // abort all services

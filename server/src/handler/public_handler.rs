@@ -1,5 +1,5 @@
 use chrono::Utc;
-use common::convert::{parse_request_bytes, request_to_bytes, response_to_bytes};
+use common::convert::{parse_request_bytes, request_to_bytes};
 use common::net::{http_json_response_as_bytes, read_bytes_from_socket, HttpResponse, TcpStreamTLS};
 use hex;
 use log::{error, info};
@@ -69,7 +69,7 @@ async fn public_handler(mut stream: TcpStreamTLS, service: PublicService) -> () 
 
     let request_id = genereate_request_id(client_id.clone());
     let public_request = PublicRequest {
-        client_id,
+        client_id: client_id.clone(),
         id: request_id.clone(),
         data: raw_request
     };
@@ -91,8 +91,8 @@ async fn public_handler(mut stream: TcpStreamTLS, service: PublicService) -> () 
     info!("Public Request: {} was enqueued.", request_id.clone());
     
     // wait for response
-    let timeout = 30u64; // time out in seconds
-    let res = match service.get_response(request_id.clone(), timeout).await {
+    let timeout = 30u64; // time out in 30 seconds
+    let res = match service.get_response(client_id, request_id.clone(), timeout).await {
         Ok(value) => value,
         Err(msg) => {
             error!("{}", msg);

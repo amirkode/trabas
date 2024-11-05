@@ -46,7 +46,7 @@ async fn public_handler(mut stream: TcpStreamTLS, service: PublicService) -> () 
             return;
         }   
     };
-    // get client and transfor request at the same time
+    // get client and transfer request at the same time
     let (request, client_id) = match get_client_id(request) {
         Ok(value) => value,
         Err(msg) => {

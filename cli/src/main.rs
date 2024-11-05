@@ -35,6 +35,11 @@ const CONFIG_ARG_SV_REDIS_HOST: &str = "redis-host";
 const CONFIG_ARG_SV_REDIS_PORT: &str = "redis-port";
 const CONFIG_ARG_SV_REDIS_PASS: &str = "redis-pass";
 
+// config arg keys for server cache
+const CONFIG_ARG_SV_CACHE_CLIENT_ID: &str = "client-id";
+const CONFIG_ARG_SV_CACHE_PATH: &str = "path";
+const CONFIG_ARG_SV_CACHE_EXP_DURATION: &str = "exp-duration";
+
 // TODO: add monitoring commands
 #[derive(Subcommand)]
 enum ClientActions {
@@ -93,6 +98,10 @@ enum ServerActions {
         #[arg(long)]
         client_request_limit: Option<u16>,
     },
+    Cache {
+        #[command(subcommand)]
+        action: ServerCacheActions,
+    },
     SetConfig {
         #[arg(
             name = CONFIG_ARG_SV_GEN_KEY, 
@@ -123,6 +132,46 @@ enum ServerActions {
             help = "Force apply the config",
         )]
         force: bool,
+    }
+}
+
+// Actions for managing server/request cache
+#[derive(Subcommand)]
+enum ServerCacheActions {
+    List { },
+    Set {
+        #[arg(
+            name = CONFIG_ARG_SV_CACHE_CLIENT_ID, 
+            long,
+            help="Redis Host for queueing"
+        )]
+        client_id: String,
+        #[arg(
+            name = CONFIG_ARG_SV_CACHE_PATH, 
+            long,
+            help="Redis Host for queueing"
+        )]
+        path: String,
+        #[arg(
+            name = CONFIG_ARG_SV_CACHE_EXP_DURATION, 
+            long,
+            help="Cache expiry duration in seconds"
+        )]
+        exp_duration: u32,
+    },
+    Remove {
+        #[arg(
+            name = CONFIG_ARG_SV_CACHE_CLIENT_ID, 
+            long,
+            help="Redis Host for queueing"
+        )]
+        client_id: String,
+        #[arg(
+            name = CONFIG_ARG_SV_CACHE_PATH, 
+            long,
+            help="Redis Host for queueing"
+        )]
+        path: String,
     }
 }
 
@@ -187,7 +236,18 @@ async fn main() {
                     Some(value) => *value,
                     None => 0
                 };
-                server::entry_point(root_host,*public_port, *client_port, client_request_limit).await
+                server::entry_point(root_host, *public_port, *client_port, client_request_limit).await
+            },
+            ServerActions::Cache { action } => match action {
+                ServerCacheActions::List { } => {
+                    server::config::show_cache_config().await;
+                },
+                ServerCacheActions::Set { client_id, path, exp_duration } => {
+                    server::config::set_cache_config((*client_id).clone(), (*path).clone(), *exp_duration).await;
+                },
+                ServerCacheActions::Remove { client_id, path } => {
+                    server::config::remove_cache_config((*client_id).clone(), (*path).clone()).await;
+                },
             },
             ServerActions::SetConfig { gen_key, redis_host, redis_port, redis_pass, force } => {
                 if gen_key.is_none() && redis_host.is_none() && redis_port.is_none() && redis_pass.is_none() {

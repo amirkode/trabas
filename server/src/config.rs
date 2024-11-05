@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use common::{
-    config::{get_config, set_configs}, 
-    security::generate_hmac_key,
+    config::{get_config, set_configs}, data::dto::cache_config::CacheConfig, security::generate_hmac_key
 };
+
+use crate::{data::{repository::cache_repo::CacheRepoImpl, store::redis::RedisDataStore}, service::cache_service::{self, CacheService}};
 
 pub const CONFIG_KEY_SERVER_SECRET: &str = "SV_SECRET";
 pub const CONFIG_KEY_SERVER_REDIS_HOST: &str = "SV_REDIS_HOST";
@@ -78,4 +79,34 @@ pub fn set_redis_configs(host: Option<String>, port: Option<String>, pass: Optio
 
     println!("Redis Configurations has been set!");
     println!("You may find the value later again in the config file"); 
+}
+
+// Cache Configs
+async fn get_cache_service() -> CacheService {
+    validate_configs();
+
+    let redis_store = RedisDataStore::new().unwrap();
+    let redis_connection = redis_store.client.get_multiplexed_async_connection().await.unwrap();
+    let cache_repo = Arc::new(CacheRepoImpl::new(redis_connection.clone()));
+    let cache_service = CacheService::new(cache_repo);
+
+    cache_service
+}
+
+pub async fn set_cache_config(client_id: String, path: String, exp_duration: u32) {
+    let cache_service = get_cache_service().await;
+
+    cache_service.set_cache_config(CacheConfig::new(client_id, path, exp_duration)).await.unwrap();
+}
+
+pub async fn remove_cache_config(client_id: String, path: String) {
+    let cache_service = get_cache_service().await;
+
+    cache_service.remove_cache_config(client_id, path).await.unwrap();
+}
+
+pub async fn show_cache_config() {
+    let cache_service = get_cache_service().await;
+
+    cache_service.show_cache_config().await.unwrap();
 }

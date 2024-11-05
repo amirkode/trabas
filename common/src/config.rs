@@ -55,7 +55,7 @@ pub fn set_configs(values: HashMap<String, String>) {
     let config_path_str = get_config_path();
     let config_path = Path::new(config_path_str.as_str());
     if !config_path.exists() {
-        create_dir_all(config_path).expect("Unable to initialie config directory.");
+        create_dir_all(config_path).expect("Unable to initiate config directory.");
     }
     
     // fecth existing env vars

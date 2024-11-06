@@ -20,7 +20,7 @@ impl UnderlyingRepoImpl {
 #[async_trait]
 impl UnderlyingRepo for UnderlyingRepoImpl {
     async fn forward(&self, request: Vec<u8>, host: String) -> Result<Vec<u8>, String> {
-        info!("Forwarding request: {} to host: {}", String::from_utf8(request.clone()).unwrap(), host.clone());
+        //info!("Forwarding request: {} to host: {}", String::from_utf8(request.clone()).unwrap(), host.clone());
         let stream = TcpStream::connect(host.as_str()).await.unwrap();
         let mut stream = TcpStreamTLS::from_tcp(stream);
         // forward request

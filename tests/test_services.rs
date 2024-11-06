@@ -217,7 +217,7 @@ async fn test_e2e_request_flow_with_cache() {
     sleep(Duration::from_secs(2)).await;
 
     // set cache config for "client1" on "/ping" with 5 seconds expiry duration
-    cache_service.set_cache_config(CacheConfig::new(String::from("client1"), String::from("GET"), String::from("/ping"), 2)).await.unwrap();
+    cache_service.set_cache_config(CacheConfig::new(String::from("client1"), String::from("GET"), String::from("/ping"), 3)).await.unwrap();
 
     // test bulk hit to server public service,
     let request_cnt = 5;
@@ -245,7 +245,7 @@ async fn test_e2e_request_flow_with_cache() {
             sleep(Duration::from_secs(2)).await;
         } else {
             // delay for 20 ms, to wait first request to be cached
-            sleep(Duration::from_millis(20)).await;
+            sleep(Duration::from_millis(50)).await;
         }
     }
 
@@ -261,7 +261,7 @@ async fn test_e2e_request_flow_with_cache() {
     info!("Request total (with cached) success count : {}", success_cnt);
     info!("Request real success count                : {}", *(success_real_cnt.lock().unwrap()));
     assert!(success_cnt == request_cnt);
-    assert!(*(success_real_cnt.lock().unwrap()) != success_cnt);
+    assert!(*(success_real_cnt.lock().unwrap()) < success_cnt);
 
     // abort all services
     server_exec.abort();

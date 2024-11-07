@@ -3,55 +3,123 @@ use std::{future::Future, pin::Pin, sync::Arc, task::{Context, Poll}};
 use futures::io;
 use http::{Response, StatusCode, Version};
 use serde::{Deserialize, Serialize};
-use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::TcpStream, sync::Mutex};
+use tokio::{io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf}, net::TcpStream, sync::Mutex};
 use tokio_native_tls::TlsStream;
 
 use crate::convert::response_to_bytes;
 
 // TODO: could've been better uniqueness (?)
-const HEALTH_CHECK_PACKET: &str = "hc_packet";
-const HEALTH_CHECK_PACKET_ACK: &str = "hc_packet_ack";
+pub const HEALTH_CHECK_PACKET: &str = "hc_b451f06";
+pub const HEALTH_CHECK_PACKET_ACK: &str = "hc_1565b85_ack";
+
+pub const PACKET_SEPARATOR: &str = "$672d20a$";
 
 // make tls as an option
 pub struct TcpStreamTLS {
-    pub tcp: Option<TcpStream>,
-    pub tls: Option<TlsStream<TcpStream>>
+    pub tcp_read: Option<ReadHalf<TcpStream>>,
+    pub tcp_write: Option<WriteHalf<TcpStream>>,
+    pub tcp_tls_read: Option<ReadHalf<TlsStream<TcpStream>>>,
+    pub tcp_tls_write: Option<WriteHalf<TlsStream<TcpStream>>>
 }
 
 impl TcpStreamTLS {
-    pub fn from_tcp(tcp: TcpStream) -> Self {
+    pub fn from_tcp(tcp_read: ReadHalf<TcpStream>, tcp_write: WriteHalf<TcpStream>) -> Self {
         TcpStreamTLS {
-            tcp: Some(tcp),
-            tls: None
+            tcp_read: Some(tcp_read),
+            tcp_write: Some(tcp_write),
+            tcp_tls_read: None,
+            tcp_tls_write: None
         }
     }
 
-    pub fn from_tls(tls: TlsStream<TcpStream>) -> Self {
+    pub fn from_tcp_read(tcp: ReadHalf<TcpStream>) -> Self {
         TcpStreamTLS {
-            tcp: None,
-            tls: Some(tls)
+            tcp_read: Some(tcp),
+            tcp_write: None,
+            tcp_tls_read: None,
+            tcp_tls_write: None
+        }
+    }
+
+    pub fn from_tcp_write(tcp: WriteHalf<TcpStream>) -> Self {
+        TcpStreamTLS {
+            tcp_read: None,
+            tcp_write: Some(tcp),
+            tcp_tls_read: None,
+            tcp_tls_write: None
+        }
+    }
+
+    pub fn from_tcp_tls(tcp_tls_read: ReadHalf<TlsStream<TcpStream>>, tcp_tls_write: WriteHalf<TlsStream<TcpStream>>) -> Self {
+        TcpStreamTLS {
+            tcp_read: None,
+            tcp_write: None,
+            tcp_tls_read: Some(tcp_tls_read),
+            tcp_tls_write: Some(tcp_tls_write)
+        }
+    }
+
+    pub fn from_tcp_tls_read(tcp: ReadHalf<TlsStream<TcpStream>>) -> Self {
+        TcpStreamTLS {
+            tcp_read: None,
+            tcp_write: None,
+            tcp_tls_read: Some(tcp),
+            tcp_tls_write: None
+        }
+    }
+
+    pub fn from_tcp_tls_write(tcp: WriteHalf<TlsStream<TcpStream>>) -> Self {
+        TcpStreamTLS {
+            tcp_read: None,
+            tcp_write: None,
+            tcp_tls_read: None,
+            tcp_tls_write: Some(tcp)
         }
     }
 
     pub fn use_tls(&self) -> bool {
-        self.tls.is_some()
+        self.tcp_tls_read.is_some() || self.tcp_tls_write.is_some()
     }
 
     pub async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.use_tls() {
-            self.tls.as_mut().unwrap().read(buf).await
+            self.tcp_tls_read.as_mut().unwrap().read(buf).await
         } else {
-            self.tcp.as_mut().unwrap().read(buf).await
+            self.tcp_read.as_mut().unwrap().read(buf).await
         }
     }
 
     pub async fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         if self.use_tls() {
-            self.tls.as_mut().unwrap().write_all(buf).await
+            self.tcp_tls_write.as_mut().unwrap().write_all(buf).await
         } else {
-            self.tcp.as_mut().unwrap().write_all(buf).await
+            self.tcp_write.as_mut().unwrap().write_all(buf).await
         }
     }
+}
+
+// IMPORTANT
+// we assume all packat exchange between server and client is string serialable
+
+pub fn prepare_packet(mut data: Vec<u8>) -> Vec<u8> {
+    let separator: Vec<u8> = Vec::from(PACKET_SEPARATOR.as_bytes());
+    data.extend(&separator);
+    data
+}
+
+pub fn separate_packets(data: Vec<u8>) -> Vec<Vec<u8>> {
+    let raw_string = String::from_utf8(data).unwrap();
+    let mut res: Vec<Vec<u8>> = Vec::new();
+    for packet in raw_string.split(PACKET_SEPARATOR) {
+        let trimmed_packet = packet.trim();
+        if trimmed_packet == "" || trimmed_packet == HEALTH_CHECK_PACKET_ACK {
+            continue;
+        }
+        
+        res.push(Vec::from(trimmed_packet.as_bytes()));
+    }
+
+    res
 }
 
 pub async fn ack_health_check_packet(stream: Arc<Mutex<TcpStreamTLS>>, data: Vec<u8>) -> bool { 

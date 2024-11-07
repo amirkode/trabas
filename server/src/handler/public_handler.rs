@@ -15,7 +15,8 @@ use crate::service::public_service::PublicService;
 
 pub async fn register_public_handler(stream: TcpStream, service: PublicService, cache_service: CacheService) {
     tokio::spawn(async move {
-        public_handler(TcpStreamTLS::from_tcp(stream), service, cache_service).await;
+        let (read_stream, write_stream) = tokio::io::split(stream);
+        public_handler(TcpStreamTLS::from_tcp(read_stream, write_stream), service, cache_service).await;
     });
 }
 

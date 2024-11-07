@@ -160,7 +160,7 @@ pub async fn tunnel_receiver_handler(stream: Arc<Mutex<TcpStreamTLS>>, tx: Arc<M
         }
     }
 
-    error!("Connection closed.");
+    info!("Tunnel receiver handler stopped.");
 }
 
 pub async fn tunnel_sender_handler(stream: Arc<Mutex<TcpStreamTLS>>, rx: Arc<Mutex<Receiver<PublicResponse>>>) {
@@ -193,5 +193,5 @@ pub async fn tunnel_sender_handler(stream: Arc<Mutex<TcpStreamTLS>>, rx: Arc<Mut
         }
     }
 
-    error!("Connection closed.");
+    info!("Tunnel sender handler stopped.");
 }

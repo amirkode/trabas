@@ -117,7 +117,7 @@ async fn tunnel_sender_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_service:
         // request from the queue
         match public_service.lock().await.dequeue_request(client_id.clone()).await {
             Ok(public_request) => {
-                println!("Request was found: {}", public_request.id.clone());
+                info!("Request was found: {}", public_request.id.clone());
                 
                 // send request to client service
                 let bytes_req = prepare_packet(to_json_vec(&public_request.clone()));

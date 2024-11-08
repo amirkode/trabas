@@ -129,7 +129,7 @@ async fn tunnel_sender_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_service:
                     }
                 };
 
-                info!("Request: {} was sent to client: {}.", public_request.id, public_request.client_id);
+                info!("Request: {} was sent to client: {}.", public_request.id, client_id.clone());
             },
             Err(_) => {
                 skip += 1;
@@ -179,7 +179,7 @@ async fn tunnel_receiver_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_servic
                 }
             };
 
-            if let Err(msg) = public_service.lock().await.assign_response(response.clone()).await {
+            if let Err(msg) = public_service.lock().await.assign_response(client_id.clone(), response.clone()).await {
                 error!("{}", msg);
                 continue;
             }

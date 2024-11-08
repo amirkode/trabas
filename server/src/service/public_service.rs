@@ -24,20 +24,20 @@ impl PublicService {
 
     // enqueue a public client request to temporary database (redis)
     // the request will further be forwarded to target client service (provider)
-    pub async fn enqueue_request(&self, request: PublicRequest) -> Result<(), String> {
+    pub async fn enqueue_request(&self, client_id: String, request: PublicRequest) -> Result<(), String> {
         // if the request limit is set, the queue len must be checked
         if self.request_limit > 0 {
-            let queue_len = self.request_repo.queue_len(request.client_id.clone()).await?;
+            let queue_len = self.request_repo.queue_len(client_id.clone()).await?;
             if queue_len > self.request_limit {
                 return Err(String::from("Max request limit has been reached"))
             }
         }
 
         // set request as pending
-        (*self.request_repo).ack_pending(request.client_id.clone(), request.id.clone()).await?;
+        (*self.request_repo).ack_pending(client_id.clone(), request.id.clone()).await?;
 
         // enqueue request
-        (*self.request_repo).push_back(request).await
+        (*self.request_repo).push_back(client_id, request).await
     }
 
     // dequeue from request queue (FIFO)
@@ -49,10 +49,15 @@ impl PublicService {
 
     // assign response to hashes mapped by request_id
     // the response is ready to be returned
-    pub async fn assign_response(&self, response: PublicResponse) -> Result<(), String> {
-        (*self.response_repo).set(response).await
+    pub async fn assign_response(&self, client_id: String, response: PublicResponse) -> Result<(), String> {
+        if !(*self.request_repo).is_pending(client_id.clone(), response.request_id.clone()).await {
+            return Err(String::from(format!("Error assigning response for request [{}]: Request invalid/expired", response.request_id.clone())))
+        }
+
+        (*self.response_repo).set(client_id, response).await
     }
 
+    // TODO: implement queue cleaning mechanism
     // get response by corresponding request id
     // it will always check the response until it's found in the cache
     // when the timeout is reached, it breaks and returns a timeout error
@@ -63,7 +68,7 @@ impl PublicService {
         sleep(Duration::from_millis(4)).await;
         loop {
             // check data and return right away if it's found
-            let res = (*self.response_repo).pop(request_id.clone()).await;
+            let res = (*self.response_repo).pop(client_id.clone(), request_id.clone()).await;
             if res.is_ok() {
                 // set request as done
                 (*self.request_repo).ack_done(client_id, request_id).await?;
@@ -77,6 +82,9 @@ impl PublicService {
                 break;
             }
         }
+
+        // set request as done
+        (*self.request_repo).ack_done(client_id, request_id.clone()).await?;
 
         Err(String::from(format!("Error getting request [{}]: Timeout reached after {} seconds", request_id, elapsed)))   
     }

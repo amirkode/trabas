@@ -104,13 +104,12 @@ async fn public_handler(mut stream: TcpStreamTLS, service: PublicService, cache_
     }
 
     let public_request = PublicRequest {
-        client_id: client_id.clone(),
         id: request_id.clone(),
         data: raw_request
     };
 
     // enqueue the request to redis
-    if let Err(e) = service.enqueue_request(public_request).await {
+    if let Err(e) = service.enqueue_request(client_id.clone(), public_request).await {
         let response = match http_json_response_as_bytes(
         HttpResponse::new(false, e), StatusCode::from_u16(503).unwrap()) {
             Ok(value) => value,

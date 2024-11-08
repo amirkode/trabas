@@ -40,7 +40,6 @@ fn init_test_env() {
         // mock env/config
         let server_secret = "74657374696e676b6579313233343536";
         env::set_var(String::from(server::config::CONFIG_KEY_SERVER_SECRET), server_secret);
-        env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_ID), "client1");
         env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_SERVER_HOST), "127.0.0.1");
         env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_SERVER_PORT), "3334");
         env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY), server_secret);
@@ -74,33 +73,63 @@ async fn test_e2e_request_flow() {
 
     // start client service
     let mock_response = String::from("pong");
-    let mock_callback = Arc::new(StdMutex::new(|| {}));
-    let underlying_repo = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), mock_callback));
-    let underlying_svc_address = String::from("This has no effect");
+    let underlying_repo1 = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), Arc::new(StdMutex::new(|| {}))));
+    let underlying_repo2 = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), Arc::new(StdMutex::new(|| {}))));
+    let underlying_repo3 = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), Arc::new(StdMutex::new(|| {}))));
     let use_tls = false;
-    let client_exec = tokio::spawn(async move {
-        client::serve(underlying_svc_address, underlying_repo, use_tls).await;
+
+    // set client1 id
+    env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_ID), "client1");
+
+    // run 3 clients
+    let client1_exec = tokio::spawn(async move {
+        client::serve(String::from("The target underlying address, This has no effect"), underlying_repo1, use_tls).await;
     });
 
-    // delay for 2 seconds to wait the client to start up
+    // delay for 2 seconds to wait the client 1 to start up
+    sleep(Duration::from_secs(2)).await;
+    // set client2 id
+    env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_ID), "client2");
+
+    let client2_exec = tokio::spawn(async move {
+        client::serve(String::from("The target underlying address, This has no effect"), underlying_repo2, use_tls).await;
+    });
+
+    // delay for 2 seconds to wait the client 2 to start up
+    sleep(Duration::from_secs(2)).await;
+    // set client3 id
+    env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_ID), "client3");
+
+    let client3_exec = tokio::spawn(async move {
+        client::serve(String::from("The target underlying address, This has no effect"), underlying_repo3, use_tls).await;
+    });
+
+    // delay for 2 seconds to wait the client 3 to start up
     sleep(Duration::from_secs(2)).await;
 
     // test hit to server public service, 
     // it should return the mock reponse client service
-    let url = String::from("http://127.0.0.1:3333/client1/ping");
-    let response = match send_http_request(url).await {
-        Ok(res) => res,
-        Err(err) => {
-            println!("Error getting response: {}", err);
-            err
-        }
-    };
+    for i in 1..=3 {
+        let url = String::from(format!("http://127.0.0.1:3333/client{}/ping", i));
+        // each client processes 10 requests
+        for _ in 0..10 {
+            let response = match send_http_request(url.clone()).await {
+                Ok(res) => res,
+                Err(err) => {
+                    println!("Error getting response: {}", err);
+                    err
+                }
+            };
 
-    assert_eq!(response, mock_response);
+            assert_eq!(response, mock_response);
+        }
+    }
 
     // abort all services
     server_exec.abort();
-    client_exec.abort();
+    client1_exec.abort();
+    client2_exec.abort();
+    client3_exec.abort();
 }
 
 #[tokio::test]
@@ -129,6 +158,10 @@ async fn test_e2e_request_flow_with_request_limit() {
     let underlying_repo = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), mock_callback));
     let underlying_svc_address = String::from("This has no effect");
     let use_tls = false;
+
+    // set client1 id
+    env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_ID), "client1");
+    
     let client_exec = tokio::spawn(async move {
         client::serve(underlying_svc_address, underlying_repo, use_tls).await;
     });
@@ -209,6 +242,10 @@ async fn test_e2e_request_flow_with_cache() {
     let underlying_repo = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), mock_callback));
     let underlying_svc_address = String::from("This has no effect");
     let use_tls = false;
+
+    // set client1 id
+    env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_ID), "client1");
+
     let client_exec = tokio::spawn(async move {
         client::serve(underlying_svc_address, underlying_repo, use_tls).await;
     });

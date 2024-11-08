@@ -21,13 +21,12 @@ pub enum ReqBodyType {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PublicRequest {
     pub id: String,
-    pub client_id: String,
     pub data: Vec<u8>
 }
 
 impl fmt::Display for PublicRequest {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Write the desired string representation of the struct
-        write!(f, "[id: {}, client_id: {})", self.id, self.client_id)
+        write!(f, "[id: {})", self.id)
     }
 }

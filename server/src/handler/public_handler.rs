@@ -15,7 +15,8 @@ use crate::service::public_service::PublicService;
 
 pub async fn register_public_handler(stream: TcpStream, service: PublicService, cache_service: CacheService) {
     tokio::spawn(async move {
-        public_handler(TcpStreamTLS::from_tcp(stream), service, cache_service).await;
+        let (read_stream, write_stream) = tokio::io::split(stream);
+        public_handler(TcpStreamTLS::from_tcp(read_stream, write_stream), service, cache_service).await;
     });
 }
 
@@ -103,13 +104,12 @@ async fn public_handler(mut stream: TcpStreamTLS, service: PublicService, cache_
     }
 
     let public_request = PublicRequest {
-        client_id: client_id.clone(),
         id: request_id.clone(),
         data: raw_request
     };
 
     // enqueue the request to redis
-    if let Err(e) = service.enqueue_request(public_request).await {
+    if let Err(e) = service.enqueue_request(client_id.clone(), public_request).await {
         let response = match http_json_response_as_bytes(
         HttpResponse::new(false, e), StatusCode::from_u16(503).unwrap()) {
             Ok(value) => value,

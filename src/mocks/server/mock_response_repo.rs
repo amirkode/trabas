@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 
 
 pub struct MockResponseRepo {
-    mock_data: Arc<Mutex<HashMap<String, PublicResponse>>>
+    mock_data: Arc<Mutex<HashMap<String, HashMap<String, PublicResponse>>>>
 }
 
 impl MockResponseRepo {
@@ -20,16 +20,22 @@ impl MockResponseRepo {
 
 #[async_trait]
 impl ResponseRepo for MockResponseRepo {
-    async fn set(&self, response: PublicResponse) -> Result<(), String> {
+    async fn set(&self, client_id: String, response: PublicResponse) -> Result<(), String> {
         let key = response.clone().request_id;
-        self.mock_data.lock().await.insert(key, response);
+        self.mock_data.lock().await.entry(client_id)
+            .or_insert_with(HashMap::new)
+            .insert(key, response);
+        
         Ok(())
     }
 
-    async fn pop(&self, request_id: String) -> Result<PublicResponse, String> {
-        if let Some(value) = self.mock_data.lock().await.get(&request_id) {
-            return Ok((*value).clone());
+    async fn pop(&self, client_id: String, request_id: String) -> Result<PublicResponse, String> {
+        if let Some(mp) = self.mock_data.lock().await.get_mut(&client_id) {
+            if let Some(res) = mp.get(&request_id) {
+                return Ok((*res).clone())
+            }
         }
+        
         Err(String::from("Data not found"))        
     }
 }

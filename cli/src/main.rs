@@ -89,6 +89,7 @@ enum ClientActions {
 #[derive(Subcommand)]
 enum ServerActions {
     Run {
+        // TODO: add option to flush all requests from redis
         #[arg(long)]
         host: Option<String>,
         #[arg(long, default_value_t = 8000)]

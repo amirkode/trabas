@@ -154,7 +154,7 @@ pub async fn tunnel_receiver_handler(stream: Arc<Mutex<TcpStreamTLS>>, tx: Arc<M
                 };
         
                 if let Ok(_) = cloned_tx.lock().await.send(public_response).await {
-                    info!("Response for request {} received in {} seconds and was enqueued to foward back", public_request.id, start_request.elapsed().as_secs());
+                    info!("Response for request {} received in {} seconds and was enqueued to forward back", public_request.id, start_request.elapsed().as_secs());
                 }
             });
         }

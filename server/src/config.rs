@@ -45,9 +45,19 @@ pub fn generate_server_secret(force: bool) -> () {
     println!("You may find the value later again in the config file")
 }
 
-pub fn set_redis_configs(host: Option<String>, port: Option<String>, pass: Option<String>, force: bool) -> () {
+pub fn set_redis_configs(key: Option<String>, host: Option<String>, port: Option<String>, pass: Option<String>, force: bool) -> () {
     let config = get_config();
     let mut config_to_set = HashMap::new();
+    
+    if let Some(k) = key {
+        if config.contains_key(CONFIG_KEY_SERVER_SECRET) && !force {
+            println!("Server secret is already set, please check it in the config file. Consider using --force option to force resetting");
+            return;
+        }
+
+        config_to_set.insert(String::from(CONFIG_KEY_SERVER_SECRET), k);
+    }
+
     if let Some(h) = host {
         if config.contains_key(CONFIG_KEY_SERVER_REDIS_HOST) && !force {
             println!("Redis Host is already set, please check it in the config file. Consider using --force option to force resetting");

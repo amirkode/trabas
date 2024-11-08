@@ -36,7 +36,7 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         let tcp_stream = match TcpStream::connect(server_address.clone()).await {
             Ok(ok) => ok,
             Err(e) => {
-                error!("Error connecting to {}: {}", server_host, e);
+                error!("Error connecting to [{}]: {}", server_address.clone(), e);
                 continue;
             }
         };

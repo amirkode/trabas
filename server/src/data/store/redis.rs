@@ -13,12 +13,7 @@ impl RedisDataStore {
         let port = std::env::var(config::CONFIG_KEY_SERVER_REDIS_PORT).unwrap_or_default();
         let pass = std::env::var(config::CONFIG_KEY_SERVER_REDIS_PASS).unwrap_or_default();
         let redis_url = format!("redis://:{}@{}:{}/0", pass, host, port);
-        
-        info!("Redis: connecting to: redis://:****@{}:{}/0", host, port);
-        
         let client = Client::open(redis_url)?;
-
-        info!("Redis: connected to: redis://:****@{}:{}/0", host, port);
 
         Ok(RedisDataStore { client } )
     }

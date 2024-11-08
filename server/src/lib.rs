@@ -31,9 +31,13 @@ pub async fn entry_point(
     validate_configs();
     let public_svc_address = format!("{}:{}", root_host, public_port);
     let client_svc_address = format!("{}:{}", root_host, client_port);
-    // init repo to be injected
+
+    info!("Redis: connecting...");
     let redis_store = RedisDataStore::new().unwrap();
     let redis_connection = redis_store.client.get_multiplexed_async_connection().await.unwrap();
+    info!("Redis: connected");
+
+    // init repo to be injected
     let cache_repo = Arc::new(CacheRepoImpl::new(redis_connection.clone()));
     let client_repo = Arc::new(ClientRepoImpl::new(redis_connection.clone()));
     let request_repo = Arc::new(RequestRepoImpl::new(redis_connection.clone()));

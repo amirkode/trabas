@@ -113,7 +113,7 @@ enum ServerActions {
         )]
         gen_key: Option<Option<String>>,
         #[arg(
-            name = CONFIG_ARG_SV_REDIS_HOST, 
+            name = CONFIG_ARG_SV_KEY, 
             long,
             help="Set server secret"
         )]

@@ -64,15 +64,20 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     let public_service_arc1 = Arc::new(Mutex::new(public_service));
     let public_service_arc2 = public_service_arc1.clone();
 
+    // share handler stop state between sender and reciever
+    let handler_stopped1 = Arc::new(Mutex::new(false));
+    let handler_stopped2 = handler_stopped1.clone();
+
+    // client ids for each handler
     let client_id1 = client_id.clone();
     let client_id2 = client_id.clone();
 
     // spawn handlers
     tokio::spawn(async move {
-        tunnel_sender_handler(write_stream_arc, public_service_arc1, client_service_arc1, client_id1).await;
+        tunnel_sender_handler(handler_stopped1, write_stream_arc, public_service_arc1, client_service_arc1, client_id1).await;
     });
     tokio::spawn(async move {
-        tunnel_receiver_handler(read_stream_arc, public_service_arc2, client_service_arc2, client_id2).await;
+        tunnel_receiver_handler(handler_stopped2, read_stream_arc, public_service_arc2, client_service_arc2, client_id2).await;
     });
 }
 
@@ -109,11 +114,17 @@ fn validate_connection(signature: String, client_id: String) -> bool {
 // Phase 1 (implemented): Separate stream writer and reader
 // Phase 2 (might)      : Write data in chunks for all requests (This is also helpful for a large request).
 //                        But, we need to manage it efficiently to avoid any overheads.
-async fn tunnel_sender_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_service: Arc<Mutex<PublicService>>, client_service: Arc<Mutex<ClientService>>, client_id: String) {
+async fn tunnel_sender_handler(
+    handler_stopped: Arc<Mutex<bool>>,
+    stream: Arc<Mutex<TcpStreamTLS>>, 
+    public_service: Arc<Mutex<PublicService>>, 
+    client_service: Arc<Mutex<ClientService>>, 
+    client_id: String,
+) {
     info!("Tunnel sender handler started.");
     
     let mut skip = 0;
-    loop {
+    while !(*handler_stopped.lock().await) {
         // request from the queue
         match public_service.lock().await.dequeue_request(client_id.clone()).await {
             Ok(public_request) => {
@@ -147,18 +158,28 @@ async fn tunnel_sender_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_service:
         }
     }
 
-    info!("Tunnel sender handler stopped.");
-    
-    // disconnect client
-    client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
+    if !(*handler_stopped.lock().await) {
+        // disconnect client
+        client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
+        info!("Client Disconnected. client_id: {}", client_id);
+    }
 
-    info!("Client Disconnected. client_id: {}", client_id);
+    // update handler stop state
+    (*handler_stopped.lock().await) = true;
+
+    info!("Tunnel sender handler stopped.");
 }
 
-async fn tunnel_receiver_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_service: Arc<Mutex<PublicService>>, client_service: Arc<Mutex<ClientService>>, client_id: String) {
+async fn tunnel_receiver_handler(
+    handler_stopped: Arc<Mutex<bool>>,
+    stream: Arc<Mutex<TcpStreamTLS>>, 
+    public_service: Arc<Mutex<PublicService>>, 
+    client_service: Arc<Mutex<ClientService>>, 
+    client_id: String
+) {
     info!("Tunnel receiver handler started.");
 
-    loop {
+    while !(*handler_stopped.lock().await) {
         // get latest response from stream
         let mut raw_response = Vec::new();
         if let Err(e) = read_bytes_from_mutexed_socket(stream.clone(), &mut raw_response).await {
@@ -190,10 +211,14 @@ async fn tunnel_receiver_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_servic
         }
     }
 
+    if !(*handler_stopped.lock().await) {
+        // disconnect client
+        client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
+        info!("Client Disconnected. client_id: {}", client_id);
+    }
+
+    // update handler stop state
+    (*handler_stopped.lock().await) = true;
+
     info!("Tunnel receiver handler stopped.");
-    
-    // disconnect client
-    client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
-    
-    info!("Client Disconnected. client_id: {}", client_id);
 }

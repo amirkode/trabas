@@ -88,16 +88,18 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         let read_stream_mutex = Arc::new(Mutex::new(read_stream));
         let write_stream_mutex = Arc::new(Mutex::new(write_stream));
         
-        // TODO: add break flag if one of the handlers stopped (?)
+        // share handler stop state between sender and reciever
+        let handler_stopped1 = Arc::new(Mutex::new(false));
+        let handler_stopped2 = handler_stopped1.clone();
 
         // spawn handlers
         let cloned_underlying_host = underlying_host.clone();
         let cloned_service = service.clone();
         let receiver_handler = tokio::spawn(async move {
-            tunnel_receiver_handler(read_stream_mutex, tx_mutex, cloned_underlying_host, cloned_service).await;
+            tunnel_receiver_handler(handler_stopped1, read_stream_mutex, tx_mutex, cloned_underlying_host, cloned_service).await;
         });
         let sender_handler = tokio::spawn(async move {
-            tunnel_sender_handler(write_stream_mutex, rx_mutex).await;
+            tunnel_sender_handler(handler_stopped2, write_stream_mutex, rx_mutex).await;
         });
 
         // wait until released
@@ -115,9 +117,15 @@ fn get_tunnel_client() -> TunnelClient {
     TunnelClient::new(client_id, signature)
 }
 
-pub async fn tunnel_receiver_handler(stream: Arc<Mutex<TcpStreamTLS>>, tx: Arc<Mutex<Sender<PublicResponse>>>, underlying_host: String, service: UnderlyingService) {
+pub async fn tunnel_receiver_handler(
+    handler_stopped: Arc<Mutex<bool>>,
+    stream: Arc<Mutex<TcpStreamTLS>>, 
+    tx: Arc<Mutex<Sender<PublicResponse>>>, 
+    underlying_host: String, 
+    service: UnderlyingService
+) {
     info!("Tunnel receiver handler started.");
-    loop {
+    while !(*handler_stopped.lock().await) {
         // get incoming request server service to forward
         let mut request = Vec::new();
         if let Err(e) = read_bytes_from_mutexed_socket(stream.clone(), &mut request).await {
@@ -160,13 +168,20 @@ pub async fn tunnel_receiver_handler(stream: Arc<Mutex<TcpStreamTLS>>, tx: Arc<M
         }
     }
 
+    // update handler stop state
+    (*handler_stopped.lock().await) = true;
+
     info!("Tunnel receiver handler stopped.");
 }
 
-pub async fn tunnel_sender_handler(stream: Arc<Mutex<TcpStreamTLS>>, rx: Arc<Mutex<Receiver<PublicResponse>>>) {
+pub async fn tunnel_sender_handler(
+    handler_stopped: Arc<Mutex<bool>>,
+    stream: Arc<Mutex<TcpStreamTLS>>,
+    rx: Arc<Mutex<Receiver<PublicResponse>>>
+) {
     info!("Tunnel sender handler started.");
     let mut skip = 0;
-    loop {
+    while !(*handler_stopped.lock().await) {
         // get ready public responses from the queue
         if let Some(public_response) = rx.lock().await.recv().await {
             info!("Response for request: {} is available.", public_response.request_id);
@@ -192,6 +207,9 @@ pub async fn tunnel_sender_handler(stream: Arc<Mutex<TcpStreamTLS>>, rx: Arc<Mut
             }
         }
     }
+
+    // update handler stop state
+    (*handler_stopped.lock().await) = true;
 
     info!("Tunnel sender handler stopped.");
 }

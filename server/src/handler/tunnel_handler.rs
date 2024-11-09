@@ -146,10 +146,12 @@ async fn tunnel_sender_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_service:
             }
         }
     }
-    
-    // disconnection
-    client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
+
     info!("Tunnel sender handler stopped.");
+    
+    // disconnect client
+    client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
+
     info!("Client Disconnected. client_id: {}", client_id);
 }
 
@@ -187,9 +189,11 @@ async fn tunnel_receiver_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_servic
             info!("Response received for request: {}.", response.request_id);
         }
     }
-    
-    // disconnection
-    client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
+
     info!("Tunnel receiver handler stopped.");
+    
+    // disconnect client
+    client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
+    
     info!("Client Disconnected. client_id: {}", client_id);
 }

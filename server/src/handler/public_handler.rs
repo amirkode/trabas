@@ -2,7 +2,7 @@ use std::io::{Cursor, Read};
 
 use chrono::Utc;
 use common::convert::{parse_request_bytes, request_to_bytes};
-use common::net::{http_json_response_as_bytes, read_bytes_from_socket, HttpResponse, TcpStreamTLS};
+use common::net::{http_json_response_as_bytes, read_bytes_from_socket_for_http, HttpResponse, TcpStreamTLS};
 use hex;
 use log::{error, info};
 use multipart::server::Multipart;
@@ -26,7 +26,7 @@ async fn public_handler(mut stream: TcpStreamTLS, service: PublicService, cache_
     info!("Tunnel handler started.");
     // read data as bytes
     let mut raw_request = Vec::new();
-    if let Err(e) = read_bytes_from_socket(&mut stream, &mut raw_request).await {
+    if let Err(e) = read_bytes_from_socket_for_http(&mut stream, &mut raw_request).await {
         error!("{}", e);
         return;
     }

@@ -6,7 +6,14 @@ use common::{
     convert::{from_json_slice, to_json_vec}, 
     data::dto::{public_request::PublicRequest, public_response::PublicResponse, tunnel_client::TunnelClient}, 
     net::{
-        http_json_response_as_bytes, prepare_packet, read_bytes_from_mutexed_socket, read_string_from_socket, separate_packets, HttpResponse, TcpStreamTLS, HEALTH_CHECK_PACKET_ACK
+        http_json_response_as_bytes,
+        prepare_packet,
+        read_bytes_from_mutexed_socket_for_internal,
+        read_string_from_socket_for_internal,
+        separate_packets,
+        HttpResponse,
+        TcpStreamTLS,
+        HEALTH_CHECK_PACKET_ACK
     }, 
     security::sign_value
 };
@@ -57,17 +64,17 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
          };
         // send connection request to server service
         let tunnel_client = get_tunnel_client();
-        let bytes_req = to_json_vec(&tunnel_client);
+        let packet = prepare_packet(to_json_vec(&tunnel_client));
 
         info!("Connecting to server service...");
-        if let Err(e) = write_stream.write_all(&bytes_req).await {
+        if let Err(e) = write_stream.write_all(&packet).await {
             error!("Error connecting to server service: {}", e);
             continue;
         }
 
         // check if the server handshake was successful
         let mut ok: String = Default::default();
-        if let Err(e) = read_string_from_socket(&mut read_stream, &mut ok).await {
+        if let Err(e) = read_string_from_socket_for_internal(&mut read_stream, &mut ok).await {
             error!("Error connecting to server service: {}", e);
             continue;
         }
@@ -128,7 +135,7 @@ pub async fn tunnel_receiver_handler(
     while !(*handler_stopped.lock().await) {
         // get incoming request server service to forward
         let mut request = Vec::new();
-        if let Err(e) = read_bytes_from_mutexed_socket(stream.clone(), &mut request).await {
+        if let Err(e) = read_bytes_from_mutexed_socket_for_internal(stream.clone(), &mut request).await {
             error!("{}", e);
             break;
         }

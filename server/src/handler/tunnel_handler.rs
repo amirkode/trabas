@@ -1,6 +1,13 @@
 
 use common::convert::{from_json_slice, to_json_vec};
-use common::net::{read_bytes_from_mutexed_socket, read_bytes_from_socket, prepare_packet, separate_packets, TcpStreamTLS, HEALTH_CHECK_PACKET_ACK};
+use common::net::{
+    read_bytes_from_mutexed_socket_for_internal, 
+    read_bytes_from_socket_for_internal,
+    prepare_packet,
+    separate_packets,
+    TcpStreamTLS,
+    HEALTH_CHECK_PACKET_ACK
+};
 use common::validate_signature;
 use log::{error, info};
 use tokio::net::TcpStream;
@@ -21,18 +28,28 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     let mut write_stream = TcpStreamTLS::from_tcp_write(write_stream);
     // register client ID
     let mut raw_response = Vec::new();
-    if let Err(e) = read_bytes_from_socket(&mut read_stream, &mut raw_response).await {
-        error!("{}", e);
+    if let Err(e) = read_bytes_from_socket_for_internal(&mut read_stream, &mut raw_response).await {
+        error!("Error reading connection: {}", e);
         return;
     }
+
+    let packets = separate_packets(raw_response);
+    let raw_response = match packets.get(0) {
+        Some(data) => data,
+        None => {
+            error!("Error reading connection: empty data");
+            return;
+        }
+    };
 
     info!("Done reading connection");
     let client: TunnelClient = match from_json_slice(&raw_response) {
         Some(value) => value,
         None => {
             let err_msg = format!("Invalid request");
+            let packet = prepare_packet(Vec::from(err_msg.as_bytes()));
             error!("{}", err_msg);
-            write_stream.write_all(err_msg.as_bytes()).await.unwrap();
+            write_stream.write_all(&packet).await.unwrap();
             return;    
         }
     };
@@ -40,15 +57,17 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     // validate connection before registering client
     if !validate_connection(client.signature.clone(), client.id.clone()) {
         let err_msg = format!("Client Registration Denied. client_id: {}, signature: {}", client_id, client.signature);
+        let packet = prepare_packet(Vec::from(err_msg.as_bytes()));
         error!("{}", err_msg);
-        write_stream.write_all(err_msg.as_bytes()).await.unwrap();
+        write_stream.write_all(&packet).await.unwrap();
         return;
     } else {
         // acknowledge the successful handshake
         let ok = b"ok";
+        let packet = prepare_packet(Vec::from(ok));
         let msg = format!("Client Registration Successful. client_id: {}, signature: {}", client_id, client.signature);
         info!("{}", msg);
-        write_stream.write_all(ok).await.unwrap();
+        write_stream.write_all(&packet).await.unwrap();
     }
 
     // sleep for 1.5 seconds to prevent race condition with healthcheck packet
@@ -182,7 +201,7 @@ async fn tunnel_receiver_handler(
     while !(*handler_stopped.lock().await) {
         // get latest response from stream
         let mut raw_response = Vec::new();
-        if let Err(e) = read_bytes_from_mutexed_socket(stream.clone(), &mut raw_response).await {
+        if let Err(e) = read_bytes_from_mutexed_socket_for_internal(stream.clone(), &mut raw_response).await {
             error!("{}", e);
             break;
         }

@@ -11,18 +11,19 @@ use http::{Request, StatusCode, Uri};
 use tokio::net::TcpStream;
 use common::data::dto::public_request::PublicRequest;
 use crate::service::cache_service::CacheService;
+use crate::service::client_service::ClientService;
 use crate::service::public_service::PublicService;
 
-pub async fn register_public_handler(stream: TcpStream, service: PublicService, cache_service: CacheService) {
+pub async fn register_public_handler(stream: TcpStream, client_service: ClientService, public_service: PublicService, cache_service: CacheService) {
     tokio::spawn(async move {
         let (read_stream, write_stream) = tokio::io::split(stream);
-        public_handler(TcpStreamTLS::from_tcp(read_stream, write_stream), service, cache_service).await;
+        public_handler(TcpStreamTLS::from_tcp(read_stream, write_stream), client_service, public_service, cache_service).await;
     });
 }
 
 // handling public request up to receive a response
 // TODO: implement error responses
-async fn public_handler(mut stream: TcpStreamTLS, service: PublicService, cache_service: CacheService) -> () {
+async fn public_handler(mut stream: TcpStreamTLS, client_service: ClientService, public_service: PublicService, cache_service: CacheService) -> () {
     info!("Tunnel handler started.");
     // read data as bytes
     let mut raw_request = Vec::new();
@@ -51,6 +52,7 @@ async fn public_handler(mut stream: TcpStreamTLS, service: PublicService, cache_
             return;
         }   
     };
+
     // get client and transfer request at the same time
     let (request, client_id, path) = match get_client_id(request) {
         Ok(value) => value,
@@ -70,6 +72,23 @@ async fn public_handler(mut stream: TcpStreamTLS, service: PublicService, cache_
             return;
         }
     };
+
+    // chek whether client is active
+    if !client_service.check_client_validity(client_id.clone()).await {
+        let msg = "Client invalid or inactive";
+        let response = match http_json_response_as_bytes(
+        HttpResponse::new(false, String::from(msg)), StatusCode::from_u16(400).unwrap()) {
+            Ok(value) => value,
+            Err(_) => {
+                return;
+            } 
+        };
+
+        error!("{}", msg);
+        stream.write_all(&response).await.unwrap();
+        return;
+    }
+
     raw_request = request_to_bytes(&request);
 
     let request_id = genereate_request_id(client_id.clone());
@@ -109,7 +128,7 @@ async fn public_handler(mut stream: TcpStreamTLS, service: PublicService, cache_
     };
 
     // enqueue the request to redis
-    if let Err(e) = service.enqueue_request(client_id.clone(), public_request).await {
+    if let Err(e) = public_service.enqueue_request(client_id.clone(), public_request).await {
         let response = match http_json_response_as_bytes(
         HttpResponse::new(false, e), StatusCode::from_u16(503).unwrap()) {
             Ok(value) => value,
@@ -126,7 +145,7 @@ async fn public_handler(mut stream: TcpStreamTLS, service: PublicService, cache_
     
     // wait for response
     let timeout = 30u64; // time out in 30 seconds
-    let res = match service.get_response(client_id.clone(), request_id.clone(), timeout).await {
+    let res = match public_service.get_response(client_id.clone(), request_id.clone(), timeout).await {
         Ok(value) => value,
         Err(msg) => {
             error!("{}", msg);

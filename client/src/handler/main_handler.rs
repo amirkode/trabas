@@ -84,7 +84,6 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         }
 
         info!("Connected to server service.");
-
         
         // create channel for request queue
         let (tx, rx) = mpsc::channel::<PublicResponse>(5);
@@ -113,6 +112,8 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         receiver_handler.await.unwrap_or_default();
         sender_handler.await.unwrap_or_default();
     }
+
+    info!("Max server binding retries exceeded.");
 }
 
 fn get_tunnel_client() -> TunnelClient {
@@ -208,7 +209,7 @@ pub async fn tunnel_sender_handler(
                 if let Err(_) = stream.lock().await.write_all(&hc).await {
                     break;
                 }
-                // sleep for 0.5 seconds
+                // sleep for 100 ms
                 sleep(Duration::from_millis(100)).await;
                 skip = 0;
             }

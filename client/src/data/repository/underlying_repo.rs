@@ -20,12 +20,14 @@ impl UnderlyingRepoImpl {
 impl UnderlyingRepo for UnderlyingRepoImpl {
     async fn forward(&self, request: Vec<u8>, host: String) -> Result<Vec<u8>, String> {
         //info!("Forwarding request: {} to host: {}", String::from_utf8(request.clone()).unwrap(), host.clone());
-        let stream = TcpStream::connect(host.as_str()).await.unwrap();
+        let stream = TcpStream::connect(host.as_str()).await
+            .map_err(|e| format!("Error connecting to underlying service: {}", e))?;
         let (read_stream, write_stream) = tokio::io::split(stream);
         let mut stream = TcpStreamTLS::from_tcp(read_stream, write_stream);
         
         // forward request
-        stream.write_all(&request).await.unwrap();
+        stream.write_all(&request).await
+            .map_err(|e| format!("Error connecting to underlying service: {}", e))?;
         
         // read response
         let mut res = Vec::new();

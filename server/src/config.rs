@@ -106,13 +106,17 @@ async fn get_cache_service() -> CacheService {
 pub async fn set_cache_config(client_id: String, method: String, path: String, exp_duration: u32) {
     let cache_service = get_cache_service().await;
 
-    cache_service.set_cache_config(CacheConfig::new(client_id, method, path, exp_duration)).await.unwrap();
+    cache_service.set_cache_config(CacheConfig::new(client_id.clone(), method.clone(), path.clone(), exp_duration)).await.unwrap();
+
+    println!("Cache config has been set (Client ID: {}, Method: {}, Path: {}, Duration: {} seconds)", client_id, method, path, exp_duration);
 }
 
 pub async fn remove_cache_config(client_id: String, method: String, path: String) {
     let cache_service = get_cache_service().await;
 
-    cache_service.remove_cache_config(client_id, method, path).await.unwrap();
+    cache_service.remove_cache_config(client_id.clone(), method.clone(), path.clone()).await.unwrap();
+
+    println!("Cache config has been unset (Client ID: {}, Method: {}, Path: {})", client_id, method, path);
 }
 
 pub async fn show_cache_config() {

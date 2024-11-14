@@ -77,7 +77,7 @@ pub async fn run(
     loop {
         tokio::select! {
             Ok((socket, _)) = public_listener.accept() => {
-                register_public_handler(socket, public_service.clone(), cache_service.clone()).await;
+                register_public_handler(socket, client_service.clone(), public_service.clone(), cache_service.clone()).await;
             }
             Ok((socket, _)) = client_listener.accept() => {
                 register_tunnel_handler(socket, client_service.clone(), public_service.clone()).await;

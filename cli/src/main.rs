@@ -1,6 +1,7 @@
 use clap::{error::ErrorKind, CommandFactory, Parser, Subcommand};
 use env_logger::{Env, Builder, Target};
 use common::config::init_env_from_config;
+use trabas::{PROJECT_NAME, PROJECT_VERSION};
 
 // TODO: complete help info
 #[derive(Parser)]
@@ -21,6 +22,7 @@ enum Commands {
         #[command(subcommand)]
         action: ServerActions,
     },
+    Version { }
 }
 
 // config arg keys for client
@@ -196,6 +198,10 @@ enum ServerCacheActions {
     }
 }
 
+fn show_version() {
+    println!("{} v{}", PROJECT_NAME, PROJECT_VERSION);
+}
+
 #[tokio::main]
 async fn main() {
     // init env vars
@@ -307,5 +313,8 @@ async fn main() {
                 server::config::set_redis_configs((*key).clone(), (*redis_host).clone(), (*redis_port).clone(), (*redis_pass).clone(), *force)
             }
         },
+        Commands::Version { } => {
+            show_version();
+        }
     }
 }

@@ -169,7 +169,7 @@ async fn tunnel_sender_handler(
                     if let Err(_) = stream.lock().await.write_all(&hc).await {
                         break;
                     }
-                    // sleep for 0.5 seconds
+                    // sleep for 100 ms
                     sleep(Duration::from_millis(100)).await;
                     skip = 0;
                 }

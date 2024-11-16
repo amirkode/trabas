@@ -29,6 +29,8 @@ cargo build --release --manifest-path cli/Cargo.toml
 ```
 you can find the built binary in `target/release/trabas`.
 
+Once you have the binary installed, you may want to know the usage of the CLI commands. The documentation can be found [here](https://github.com/amirkode/trabas/blob/main/doc/CLI.md).
+
 Here's how to start tunneling:
 
 **Server Service**

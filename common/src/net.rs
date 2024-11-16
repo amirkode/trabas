@@ -127,6 +127,9 @@ pub async fn read_bytes_from_socket_for_internal(stream: &mut TcpStreamTLS, res:
     let mut buffer = [0; 1024];
     let end_window = PACKET_SEPARATOR.as_bytes();
     let end_window_len = end_window.len();
+    let break_limit = 100;
+    let mut break_cnt = 0;
+    let mut prev_len = res.len();
     loop {
         let n = stream.read(&mut buffer).await
             .map_err(|e| format!("Error reading socket: {}",  e))?;
@@ -140,9 +143,21 @@ pub async fn read_bytes_from_socket_for_internal(stream: &mut TcpStreamTLS, res:
         // we break until the last element is the separator
         // because all request must be transfered in a full form
         // TODO: implement breaker for unexpected connection (?)
-        if res[(res.len() - end_window_len)..] == *end_window {
+        if res.len() >= end_window_len && res[(res.len() - end_window_len)..] == *end_window {
             break;
         }
+
+        // try at most the break_limit for any empty transfer
+        let curr_len = res.len();
+        if prev_len == curr_len {
+            if break_cnt == break_limit {
+                info!("Socket reading break limit exceeded");
+                break;
+            }
+            break_cnt += 1;
+        }
+        
+        prev_len = curr_len;
     }
 
     Ok(())
@@ -153,6 +168,9 @@ pub async fn read_bytes_from_mutexed_socket_for_internal(stream: Arc<Mutex<TcpSt
     let mut buffer = [0; 1024];
     let end_window = PACKET_SEPARATOR.as_bytes();
     let end_window_len = end_window.len();
+    let break_limit = 100;
+    let mut break_cnt = 0;
+    let mut prev_len = res.len();
     loop {
         let n = stream.lock().await.read(&mut buffer).await
             .map_err(|e| format!("Error reading socket: {}",  e))?;
@@ -161,9 +179,21 @@ pub async fn read_bytes_from_mutexed_socket_for_internal(stream: Arc<Mutex<TcpSt
         // we break until the last element is the separator
         // because all request must be transfered in a full form
         // TODO: implement breaker for unexpected connection (?)
-        if res[(res.len() - end_window_len)..] == *end_window {
+        if res.len() >= end_window_len && res[(res.len() - end_window_len)..] == *end_window {
             break;
         }
+
+        // try at most the break_limit for any empty transfer
+        let curr_len = res.len();
+        if prev_len == curr_len {
+            if break_cnt == break_limit {
+                info!("Socket reading break limit exceeded");
+                break;
+            }
+            break_cnt += 1;
+        }
+        
+        prev_len = curr_len;
     }
 
     Ok(())
@@ -224,7 +254,9 @@ pub async fn read_bytes_from_socket_for_http(stream: &mut TcpStreamTLS, res: &mu
         .lines()
         .find_map(|line| line.strip_prefix("Content-Length:").map(|len| len.trim().parse().ok()))
         .flatten();
-    
+    let connection: Option<String> = headers_text
+        .lines()
+        .find_map(|line| line.strip_prefix("Connection:").map(|len| len.trim().to_lowercase().to_string()));
     let is_chunked = headers_text
         .lines()
         .any(|line| {
@@ -236,9 +268,7 @@ pub async fn read_bytes_from_socket_for_http(stream: &mut TcpStreamTLS, res: &mu
         // handle chunked data
         let mut body_start = headers_end;
         let mut decoded_body = Vec::new();
-        let mut i = 0;
         loop {
-            i += 1;
             // read hex str size of the current chunk
             let mut chunk_size_str = String::new();
             while body_start < res.len() {
@@ -317,6 +347,18 @@ pub async fn read_bytes_from_socket_for_http(stream: &mut TcpStreamTLS, res: &mu
             }
             
             prev_len = curr_len;
+        }
+    } else if let Some(connection) = connection {
+        if connection == "close" {
+            // continue read until end of connection
+            loop {
+                let n = stream.read(&mut buffer).await.map_err(|e| format!("Error reading socket: {}", e))?;
+                if n == 0 {
+                    break;
+                }
+                
+                res.extend_from_slice(&buffer[..n]);
+            }
         }
     }
 

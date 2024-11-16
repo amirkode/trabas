@@ -1,8 +1,15 @@
+use std::collections::HashMap;
 use std::io::{Cursor, Read};
 
 use chrono::Utc;
-use common::convert::{parse_request_bytes, request_to_bytes};
-use common::net::{http_json_response_as_bytes, read_bytes_from_socket_for_http, HttpResponse, TcpStreamTLS};
+use common::convert::{parse_request_bytes, request_to_bytes, modify_headers_of_response_bytes};
+use common::net::{
+    http_json_response_as_bytes,
+    read_bytes_from_socket_for_http,
+    get_cookie_from_request,
+    HttpResponse,
+    TcpStreamTLS
+};
 use hex;
 use log::{error, info};
 use multipart::server::Multipart;
@@ -14,17 +21,31 @@ use crate::service::cache_service::CacheService;
 use crate::service::client_service::ClientService;
 use crate::service::public_service::PublicService;
 
-pub async fn register_public_handler(stream: TcpStream, client_service: ClientService, public_service: PublicService, cache_service: CacheService) {
+const CLIENT_ID_COOKIE_KEY: &str = "trabas_client_id";
+
+pub async fn register_public_handler(
+    stream: TcpStream, 
+    client_service: ClientService, 
+    public_service: PublicService, 
+    cache_service: CacheService, 
+    cache_client_id: bool
+) {
     tokio::spawn(async move {
         let (read_stream, write_stream) = tokio::io::split(stream);
-        public_handler(TcpStreamTLS::from_tcp(read_stream, write_stream), client_service, public_service, cache_service).await;
+        public_handler(TcpStreamTLS::from_tcp(
+            read_stream, write_stream), client_service, public_service, cache_service, cache_client_id).await;
     });
 }
 
 // handling public request up to receive a response
 // TODO: implement error responses
-async fn public_handler(mut stream: TcpStreamTLS, client_service: ClientService, public_service: PublicService, cache_service: CacheService) -> () {
-    info!("Tunnel handler started.");
+async fn public_handler(
+    mut stream: TcpStreamTLS, 
+    client_service: ClientService, 
+    public_service: PublicService, 
+    cache_service: CacheService,
+    cache_client_id: bool
+) -> () {
     // read data as bytes
     let mut raw_request = Vec::new();
     if let Err(e) = read_bytes_from_socket_for_http(&mut stream, &mut raw_request).await {
@@ -54,7 +75,7 @@ async fn public_handler(mut stream: TcpStreamTLS, client_service: ClientService,
     };
 
     // get client and transfer request at the same time
-    let (request, client_id, path) = match get_client_id(request) {
+    let (request, client_id, path) = match get_client_id(request, cache_client_id) {
         Ok(value) => value,
         Err(msg) => {
             error!("{}", msg);
@@ -105,6 +126,8 @@ async fn public_handler(mut stream: TcpStreamTLS, client_service: ClientService,
     let request_body = get_unique_body_as_bytes(request.clone());
     let cache_config = cache_service.get_cache_config(client_id.clone(), request_method.clone(), path.clone()).await;
 
+    info!("Public Request: [{}] [{}] {}", request_id.clone(), request_method.clone(), request_uri.clone());
+
     match cache_config.clone() {
         Ok(_) => {
             match cache_service.get_cache(client_id.clone(), request_uri.clone(), request_method.clone(), request_body.clone()).await {
@@ -144,7 +167,7 @@ async fn public_handler(mut stream: TcpStreamTLS, client_service: ClientService,
     info!("Public Request: {} was enqueued.", request_id.clone());
     
     // wait for response
-    let timeout = 30u64; // time out in 30 seconds
+    let timeout = 60u64; // time out in 60 seconds
     let res = match public_service.get_response(client_id.clone(), request_id.clone(), timeout).await {
         Ok(value) => value,
         Err(msg) => {
@@ -157,9 +180,15 @@ async fn public_handler(mut stream: TcpStreamTLS, client_service: ClientService,
         }
     };
 
+    // normalize headers
+    let res = normalize_response_headers(res.data, match cache_client_id {
+        true => Some(client_id.clone()),
+        false => None
+    });
+
     match cache_config {
         Ok(config) => {
-            if let Err(msg) = cache_service.set_cache(client_id, request_uri, request_method, request_body, res.data.clone(), config).await {
+            if let Err(msg) = cache_service.set_cache(client_id, request_uri, request_method, request_body, res.clone(), config).await {
                 error!("Error writing cache for request {}: {}", request_id.clone(), msg);
             }
         },
@@ -169,7 +198,20 @@ async fn public_handler(mut stream: TcpStreamTLS, client_service: ClientService,
     info!("Public Request: {} processed.", request_id);
 
     // finally return the response to public client
-    stream.write_all(&(res.data)).await.unwrap();
+    stream.write_all(&res).await.unwrap();
+}
+
+fn normalize_response_headers(res: Vec<u8>, to_cache_client_id: Option<String>) -> Vec<u8> {
+    let headers_to_set = vec![
+        "Transfer-Encoding".to_string(),
+        "Content-Length".to_string()
+    ];
+    let cookies_to_set = match to_cache_client_id {
+        Some(client_id) => HashMap::from([(CLIENT_ID_COOKIE_KEY.to_string(), client_id)]),
+        None => HashMap::new()
+    };
+    
+    return modify_headers_of_response_bytes(&res, headers_to_set, cookies_to_set, true);
 }
 
 // this returns unique bytes representation of body with cleaned insignificant part such "boundary"
@@ -217,7 +259,11 @@ fn get_unique_body_as_bytes(req: Request<Vec<u8>>) -> Vec<u8> {
 // so, the accessible path from public:
 // /[client id]/[actual path] -> /client_12345/api/v1/ping
 // TODO: add client connection validation and retrier until a certain count
-fn get_client_id<T>(mut request: Request<T>) -> Result<(Request<T>, String, String), String> {
+fn get_client_id<T>(mut request: Request<T>, cache_client_id: bool) -> Result<(Request<T>, String, String), String> {
+    let cached_client = match cache_client_id {
+        true => get_cookie_from_request(&request, CLIENT_ID_COOKIE_KEY),
+        false => None
+    };
     let uri = request.uri().clone();
     let mut path = uri.path().to_string();
     let path = if path.starts_with('/') {
@@ -230,8 +276,23 @@ fn get_client_id<T>(mut request: Request<T>) -> Result<(Request<T>, String, Stri
     // get first path as client id
     let client_id = path_split[0].clone();
     if client_id.is_empty() {
+        // check whether client id found in the cache/cookie
+        // if exists, then we should not be worry about the client id
+        if let Some(cached_client_id) = cached_client {
+            return  Ok((request, cached_client_id, "/".to_string()));
+        }
+
         return Err(String::from("Client ID cannot be empty or invalid."))
     }
+
+    if let Some(cached_client_id) = cached_client {
+        // if cached client id is not equal to first path of the request
+        // it's most likely the client relies on the cached client id
+        if cached_client_id != client_id {
+            return  Ok((request, cached_client_id, "/".to_string()));
+        }
+    }
+
     // remove first path from the split
     let new_path = format!("/{}", (&path_split[1..]).join("/"));
     // update query
@@ -252,6 +313,8 @@ fn get_client_id<T>(mut request: Request<T>) -> Result<(Request<T>, String, Stri
     Ok((request, client_id, new_path))
 }
 
+
+// TODO: might add request body for uniqueness (?)
 fn genereate_request_id(client_id: String) -> String {
     // combine client_id and timestamp epoch
     let timestamp = Utc::now().timestamp_nanos_opt().unwrap().to_string();

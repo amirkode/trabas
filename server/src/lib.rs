@@ -21,17 +21,20 @@ use service::public_service::PublicService;
 
 use tokio::net::TcpListener;
 
+// TODO: too many parameters, bind it in a data struct
 // entry point of the server service
 pub async fn entry_point(
     root_host: String, 
     public_port: u16, 
     client_port: u16,
     client_request_limit: u16,
+    cache_client_id: bool
 ) {
     validate_configs();
     let public_svc_address = format!("{}:{}", root_host, public_port);
     let client_svc_address = format!("{}:{}", root_host, client_port);
 
+    // TODO: add retrier if connection attempt is failed
     info!("Redis: connecting...");
     let redis_store = RedisDataStore::new().unwrap();
     let redis_connection = redis_store.client.get_multiplexed_async_connection().await.unwrap();
@@ -47,6 +50,7 @@ pub async fn entry_point(
         public_svc_address,
         client_svc_address,
         client_request_limit,
+        cache_client_id,
         cache_repo,
         client_repo,
         request_repo,
@@ -59,6 +63,7 @@ pub async fn run(
     public_svc_address: String,
     client_svc_address: String,
     client_request_limit: u16,
+    cache_client_id: bool,
     cache_repo: Arc<dyn CacheRepo + Send + Sync>,
     client_repo: Arc<dyn ClientRepo + Send + Sync>,
     request_repo: Arc<dyn RequestRepo + Send + Sync>,
@@ -77,7 +82,7 @@ pub async fn run(
     loop {
         tokio::select! {
             Ok((socket, _)) = public_listener.accept() => {
-                register_public_handler(socket, client_service.clone(), public_service.clone(), cache_service.clone()).await;
+                register_public_handler(socket, client_service.clone(), public_service.clone(), cache_service.clone(), cache_client_id).await;
             }
             Ok((socket, _)) = client_listener.accept() => {
                 register_tunnel_handler(socket, client_service.clone(), public_service.clone()).await;

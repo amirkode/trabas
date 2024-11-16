@@ -28,6 +28,10 @@ impl ClientRepo for ClientRepoImpl {
     async fn get(&self, id: String) -> Result<TunnelClient, String> {
         let data: Vec<u8> = self.connection.clone().hget(REDIS_KEY_CLIENT, id.clone()).await
             .map_err(|e| format!("Error getting client {}: {}", id, e))?;
+        if data.len() == 0 {
+            return Err(String::from("Error getting client: no valid client exists"));
+        }
+
         let res: TunnelClient = from_json_slice(&data).unwrap();
         Ok(res)
     }

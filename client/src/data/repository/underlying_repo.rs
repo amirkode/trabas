@@ -33,12 +33,19 @@ impl UnderlyingRepo for UnderlyingRepoImpl {
         let mut res = Vec::new();
         read_bytes_from_socket_for_http(&mut stream, &mut res).await?;
 
+        // this is for debugging
         // let res_str = match String::from_utf8(res.clone()) {
         //     Ok(value) => value,
         //     Err(err) => format!("err: {}", err)
         // };
-        
-        // info!("underlying service response:\n{}", res_str);
+
+        // let res_len = res_str.len();
+        // if res_len < 1000 {
+        //     info!("underlying service response:\n{}", res_str);
+        // } else {
+        //     info!("underlying service prefix response:\n{}", res_str.get(..500).unwrap_or(""));
+        //     info!("underlying service suffix response:\n{}", res_str.get(res_str.len().saturating_sub(500)..).unwrap_or(""));
+        // }
 
         Ok(res)
     }

@@ -1,12 +1,16 @@
 use std::sync::Arc;
 
 use futures::io;
-use http::{Response, StatusCode, Version};
+use http::{Request, Response, StatusCode, Version};
+use cookie::{Cookie, CookieJar};
+use log::info;
 use serde::{Deserialize, Serialize};
 use tokio::{io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf}, net::TcpStream, sync::Mutex};
 use tokio_native_tls::TlsStream;
 
 use crate::convert::response_to_bytes;
+
+// these values are standard for this tool
 pub const HEALTH_CHECK_PACKET_ACK: &str = "hc_1565b85_ack";
 pub const PACKET_SEPARATOR: &str = "$672d20a$";
 
@@ -133,7 +137,10 @@ pub async fn read_bytes_from_socket_for_internal(stream: &mut TcpStreamTLS, res:
         // }
 
         res.extend_from_slice(&buffer[..n]);
-        if res.windows(end_window_len).any(|window| window == end_window) && n < buffer.len() {
+        // we break until the last element is the separator
+        // because all request must be transfered in a full form
+        // TODO: implement breaker for unexpected connection (?)
+        if res[(res.len() - end_window_len)..] == *end_window {
             break;
         }
     }
@@ -151,7 +158,10 @@ pub async fn read_bytes_from_mutexed_socket_for_internal(stream: Arc<Mutex<TcpSt
             .map_err(|e| format!("Error reading socket: {}",  e))?;
 
         res.extend_from_slice(&buffer[..n]);
-        if res.windows(end_window_len).any(|window| window == end_window) && n < buffer.len() {
+        // we break until the last element is the separator
+        // because all request must be transfered in a full form
+        // TODO: implement breaker for unexpected connection (?)
+        if res[(res.len() - end_window_len)..] == *end_window {
             break;
         }
     }
@@ -176,36 +186,137 @@ pub async fn read_string_from_socket_for_internal(stream: &mut TcpStreamTLS, res
 // TODO: reconsider using standard library or popular library for HTTP response reading (?)
 pub async fn read_bytes_from_socket_for_http(stream: &mut TcpStreamTLS, res: &mut Vec<u8>) -> Result<(), String> {
     let mut buffer = [0; 1024];
+    let break_limit = 100;
+    let mut break_cnt = 0;
+    let mut prev_len = res.len();
     // reading headers
     loop {
         let n = stream.read(&mut buffer).await.map_err(|e| format!("Error reading socket: {}", e))?;
 
         res.extend_from_slice(&buffer[..n]);
-        if res.windows(4).any(|w| w == b"\r\n\r\n") || n < buffer.len() {
+        if res.windows(4).any(|w| w == b"\r\n\r\n") {
             break;
         }
+
+        // try at most the break_limit for any empty transfer
+        let curr_len = res.len();
+        if prev_len == curr_len {
+            if break_cnt == break_limit {
+                info!("Socket reading break limit exceeded");
+                break;
+            }
+            break_cnt += 1;
+        }
+        
+        prev_len = curr_len;
     }
 
-    // check content length in header (this is not necessarily a header)
+    // check headers
     let headers_text = String::from_utf8_lossy(&res);
-    let headers_end = headers_text.find("\r\n\r\n");
+    let headers_end = match headers_text.find("\r\n\r\n") {
+        Some(value) => value + 4, // skip \r\n\r\n
+        None => {
+            return Ok(());
+        }
+    };
+    
     let content_length: Option<usize> = headers_text
         .lines()
         .find_map(|line| line.strip_prefix("Content-Length:").map(|len| len.trim().parse().ok()))
         .flatten();
+    
+    let is_chunked = headers_text
+        .lines()
+        .any(|line| {
+            line.to_lowercase().starts_with("transfer-encoding:") && 
+            line.to_lowercase().contains("chunked")
+        });
 
-    // continue reading socket
-    if let Some(len) = content_length {
-        if let Some(body_start) = headers_end {
-            let target_len = res.len() + len - (res.len() - body_start);
-            while res.len() < target_len {
-                let n = stream.read(&mut buffer).await
-                    .map_err(|e| format!("Error reading socket: {}",  e))?;
-                res.extend_from_slice(&buffer[..n]);
-                if n < buffer.len() {
-                    break;
+    if is_chunked {
+        // handle chunked data
+        let mut body_start = headers_end;
+        let mut decoded_body = Vec::new();
+        let mut i = 0;
+        loop {
+            i += 1;
+            // read hex str size of the current chunk
+            let mut chunk_size_str = String::new();
+            while body_start < res.len() {
+                let byte = res[body_start] as char;
+                body_start += 1;
+                
+                if byte == '\r' {
+                    if body_start < res.len() && res[body_start] as char == '\n' {
+                        body_start += 1;
+                        break;
+                    }
+                } else {
+                    chunk_size_str.push(byte);
                 }
             }
+            
+            // convert the hex size to int
+            let chunk_size = usize::from_str_radix(chunk_size_str.trim(), 16)
+                .map_err(|e| format!("Invalid chunk size: {}", e))?;
+            
+            // we've reached the end
+            if chunk_size == 0 {
+                break;
+            }
+            
+            // read the remaining data in chunk
+            while (body_start + chunk_size) > res.len() {
+                let n = stream.read(&mut buffer).await
+                    .map_err(|e| format!("Error reading socket: {}", e))?;
+                if n == 0 {
+                    return Err("Error reading socket: Connection closed before completing chunked transfer".to_string());
+                }
+
+                res.extend_from_slice(&buffer[..n]);
+            }
+            
+            // extract chunk data
+            decoded_body.extend_from_slice(&res[body_start..body_start + chunk_size]);
+            body_start += chunk_size;
+            
+            // perform another reading, if ending separator has not been read
+            if (body_start + 2) > res.len() {
+                let n = stream.read(&mut buffer).await
+                    .map_err(|e| format!("Error reading socket: {}", e))?;
+                res.extend_from_slice(&buffer[..n]);
+            }
+
+            body_start += 2; // skip \r\n (separator)
+        }
+        
+        // Keep headers and replace body with decoded chunks
+        res.truncate(headers_end); // Keep only headers
+        res.extend_from_slice(&decoded_body); // Add decoded body
+        
+    } else if let Some(len) = content_length {
+        // handle data with Content-Length
+        let target_len = headers_end + len;
+        
+        break_cnt = 0;
+        prev_len = res.len();
+
+        while prev_len < target_len {
+            let n = stream.read(&mut buffer).await
+                .map_err(|e| format!("Error reading socket: {}", e))?;
+
+            res.extend_from_slice(&buffer[..n]);
+
+            // try at most the break_limit for any empty transfer
+            let curr_len = res.len();
+            if prev_len == curr_len {
+                if break_cnt == break_limit {
+                    info!("Socket reading break limit exceeded");
+                    break;
+                }
+                break_cnt += 1;
+            }
+            
+            prev_len = curr_len;
         }
     }
 
@@ -255,4 +366,19 @@ pub fn http_string_response_as_bytes(response: String, status: StatusCode) -> Re
         .map_err(|e| format!("Error building json response: {}", e))?;
 
     Ok(response_to_bytes(&res))
+}
+
+// get cookie from request headers
+pub fn get_cookie_from_request<T>(req: &Request<T>, cookie_name: &str) -> Option<String> {
+    let cookie_header = req.headers().get("cookie")?;
+    let cookie_str = cookie_header.to_str().ok()?;
+
+    let mut jar = CookieJar::new();
+    for cookie in cookie_str.split("; ") {
+        if let Ok(parsed_cookie) = Cookie::parse(cookie.to_string()) {
+            jar.add(parsed_cookie);
+        }
+    }
+
+    jar.get(cookie_name).map(|cookie| cookie.value().to_string())
 }

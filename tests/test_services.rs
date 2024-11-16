@@ -1,9 +1,9 @@
-use std::{env, sync::Arc, time::Duration};
+use std::{collections::HashMap, env, sync::Arc, time::Duration};
 
 use common::data::dto::cache_config::CacheConfig;
 use env_logger::{Env, Builder, Target};
 use log::{error, info};
-use reqwest::Client;
+use reqwest::{header::{HeaderMap, HeaderValue, COOKIE, SET_COOKIE}, Client, Response};
 use server::service::cache_service::CacheService;
 use std::sync::Once;
 use tokio::{sync::Mutex, task::{self, JoinHandle}, time::sleep};
@@ -18,18 +18,25 @@ use trabas::mocks::{
     }
 };
 
-async fn send_http_request(url: String) -> Result<String, String> {
+async fn send_http_request(url: String, cookies: Option<HashMap<String, String>>) -> Result<Response, String> {
     let client = Client::new();
-    let response = client.get(url).send().await
-        .map_err(|e| format!("{}",  e))?;
-    let status = response.status();
-    let text = response.text().await
-        .map_err(|e| format!("{}",  e))?;
-    if status != 200 {
-        return Err(text);
+    let mut headers = HeaderMap::new();
+    if let Some(cookies) = cookies {
+        let cookie_string = cookies
+            .iter()
+            .map(|(key, value)| format!("{}={}", key, value))
+            .collect::<Vec<_>>()
+            .join("; ");
+        headers.insert(COOKIE, HeaderValue::from_str(&cookie_string).unwrap());
     }
 
-    Ok(text)
+    let response = client
+        .get(url)
+        .headers(headers)
+        .send().await
+        .map_err(|e| format!("{}",  e))?;
+
+    Ok(response)
 }
 
 static INIT: Once = Once::new();
@@ -65,7 +72,7 @@ async fn test_e2e_request_flow() {
     let public_svc_address = String::from("127.0.0.1:3333");
     let client_svc_address = String::from("127.0.0.1:3334");
     let server_exec = tokio::spawn(async move {
-        server::run(public_svc_address, client_svc_address, 0, cache_repo, client_repo, request_repo, response_repo).await;
+        server::run(public_svc_address, client_svc_address, 0, false, cache_repo, client_repo, request_repo, response_repo).await;
     });
 
     // delay for 2 seconds to wait the server to start up
@@ -113,8 +120,8 @@ async fn test_e2e_request_flow() {
         let url = String::from(format!("http://127.0.0.1:3333/client{}/ping", i));
         // each client processes 10 requests
         for _ in 0..10 {
-            let response = match send_http_request(url.clone()).await {
-                Ok(res) => res,
+            let response = match send_http_request(url.clone(), None).await {
+                Ok(res) => res.text().await.unwrap(),
                 Err(err) => {
                     println!("Error getting response: {}", err);
                     err
@@ -146,7 +153,7 @@ async fn test_e2e_request_flow_with_request_limit() {
     let public_svc_address = String::from("127.0.0.1:3333");
     let client_svc_address = String::from("127.0.0.1:3334");
     let server_exec = tokio::spawn(async move {
-        server::run(public_svc_address, client_svc_address, request_limit, cache_repo, client_repo, request_repo, response_repo).await;
+        server::run(public_svc_address, client_svc_address, request_limit, false, cache_repo, client_repo, request_repo, response_repo).await;
     });
 
     // delay for 2 seconds to wait the server to start up
@@ -178,9 +185,9 @@ async fn test_e2e_request_flow_with_request_limit() {
         let responses_clone = Arc::clone(&responses);
         let handle = task::spawn(async move {
             let url = String::from("http://127.0.0.1:3333/client1/ping");
-            match send_http_request(url).await {
+            match send_http_request(url, None).await {
                 Ok(res) => {
-                    responses_clone.lock().await.push(res);
+                    responses_clone.lock().await.push(res.text().await.unwrap());
                 },
                 Err(err) => {
                     error!("Error getting response: {}", err);
@@ -222,7 +229,7 @@ async fn test_e2e_request_flow_with_cache() {
     let public_svc_address = String::from("127.0.0.1:3333");
     let client_svc_address = String::from("127.0.0.1:3334");
     let server_exec = tokio::spawn(async move {
-        server::run(public_svc_address, client_svc_address, 0, cache_repo, client_repo, request_repo, response_repo).await;
+        server::run(public_svc_address, client_svc_address, 0, false, cache_repo, client_repo, request_repo, response_repo).await;
     });
 
     // delay for 2 seconds to wait the server to start up
@@ -265,9 +272,9 @@ async fn test_e2e_request_flow_with_cache() {
         let responses_clone = Arc::clone(&responses);
         let handle = task::spawn(async move {
             let url = String::from("http://127.0.0.1:3333/client1/ping");
-            match send_http_request(url).await {
+            match send_http_request(url, None).await {
                 Ok(res) => {
-                    responses_clone.lock().await.push(res);
+                    responses_clone.lock().await.push(res.text().await.unwrap());
                 },
                 Err(err) => {
                     error!("Error getting response: {}", err);
@@ -299,6 +306,103 @@ async fn test_e2e_request_flow_with_cache() {
     info!("Request real success count                : {}", *(success_real_cnt.lock().unwrap()));
     assert!(success_cnt == request_cnt);
     assert!(*(success_real_cnt.lock().unwrap()) < success_cnt);
+
+    // abort all services
+    server_exec.abort();
+    client_exec.abort();
+}
+
+#[tokio::test]
+async fn test_e2e_request_flow_with_client_id_cache_enabled() {
+    // init mock env
+    init_test_env();
+
+    // start server service
+    let cache_repo = Arc::new(MockCacheRepo::new());
+    let client_repo = Arc::new(MockClientRepo::new());
+    let request_repo = Arc::new(MockRequestRepo::new());
+    let response_repo = Arc::new(MockResponseRepo::new());
+    let public_svc_address = String::from("127.0.0.1:3333");
+    let client_svc_address = String::from("127.0.0.1:3334");
+    let server_exec = tokio::spawn(async move {
+        // enable the client id cache
+        let cache_client_id = true;
+        server::run(public_svc_address, client_svc_address, 0, cache_client_id, cache_repo, client_repo, request_repo, response_repo).await;
+    });
+
+    // delay for 2 seconds to wait the server to start up
+    sleep(Duration::from_secs(2)).await;
+
+    // start client service
+    let mock_response = String::from("pong");
+    let mock_callback = Arc::new(StdMutex::new(|| {}));
+    let underlying_repo = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), mock_callback));
+    let underlying_svc_address = String::from("This has no effect");
+    let use_tls = false;
+
+    // set client1 id
+    env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_ID), "client1");
+
+    let client_exec = tokio::spawn(async move {
+        client::serve(underlying_svc_address, underlying_repo, use_tls).await;
+    });
+
+    // delay for 2 seconds to wait the client to start up
+    sleep(Duration::from_secs(2)).await;
+
+    // test bulk hit to server public service,
+    let request_cnt = 5;
+    let mut handles: Vec<JoinHandle<()>> = Vec::new();
+    let responses = Arc::new(Mutex::new(Vec::<String>::new()));
+    // it should return the mock reponse client service
+    for i in 0..request_cnt {
+        let responses_clone = Arc::clone(&responses);
+        let handle = task::spawn(async move {
+            // without specifying /client1 path
+            let url = String::from("http://127.0.0.1:3333/ping");
+            let cookies = HashMap::from([
+                ("trabas_client_id".to_string(), "client1".to_string())
+            ]);
+            match send_http_request(url, Some(cookies)).await {
+                Ok(res) => {
+                    // check set cookie header
+                    if let Some(set_cookie_headers) = res.headers().get(SET_COOKIE) {
+                        assert!(set_cookie_headers.to_str().unwrap().contains("trabas_client_id=client1;"));
+                    } else {
+                        println!("No Set-Cookie headers found.");
+                        assert!(false);
+                    }
+                    
+                    responses_clone.lock().await.push(res.text().await.unwrap());
+                },
+                Err(err) => {
+                    error!("Error getting response: {}", err);
+                }
+            };
+        });
+
+        handles.push(handle);
+
+        if i == 1 {
+            // on second request delay for 2 seconds to pass the cache expiration
+            sleep(Duration::from_secs(2)).await;
+        } else {
+            // delay for 20 ms, to wait first request to be cached
+            sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    for handle in handles {
+        let _ = handle.await;
+    }
+
+    for response in responses.lock().await.iter() {
+        assert_eq!(*response, mock_response);
+    }
+
+    let success_cnt = responses.lock().await.len();
+    info!("Request total success count : {}", success_cnt);
+    assert!(success_cnt == request_cnt);
 
     // abort all services
     server_exec.abort();

@@ -102,6 +102,10 @@ enum ServerActions {
         // max number of requests in a time per client across service-wide
         #[arg(long)]
         client_request_limit: Option<u16>,
+        // cache client id in the cookie, so the next hit from browser
+        // does not have to define in the path
+        #[arg(long)]
+        cache_client_id: bool,
     },
     CacheConfig {
         #[command(subcommand)]
@@ -254,7 +258,7 @@ async fn main() {
             }
         },
         Commands::Server { action } => match action {
-            ServerActions::Run { host, public_port, client_port,  client_request_limit} => {
+            ServerActions::Run { host, public_port, client_port,  client_request_limit, cache_client_id} => {
                 let root_host = match host {
                     Some(value) => (*value).clone(),
                     None => String::from("127.0.0.1")
@@ -263,7 +267,7 @@ async fn main() {
                     Some(value) => *value,
                     None => 0
                 };
-                server::entry_point(root_host, *public_port, *client_port, client_request_limit).await
+                server::entry_point(root_host, *public_port, *client_port, client_request_limit, *cache_client_id).await
             },
             ServerActions::CacheConfig { action } => match action {
                 ServerCacheActions::List { } => {

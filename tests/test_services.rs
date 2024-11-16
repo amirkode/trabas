@@ -35,8 +35,13 @@ async fn send_http_request(url: String, cookies: Option<HashMap<String, String>>
         .headers(headers)
         .send().await
         .map_err(|e| format!("{}",  e))?;
+    let response_status = response.status().as_u16();
 
-    Ok(response)
+    if response_status >= 200 && response_status < 300 {
+        return Ok(response);    
+    }
+
+    Err("Invalid status code".to_string())
 }
 
 static INIT: Once = Once::new();

@@ -1,4 +1,5 @@
 use common::net::{read_bytes_from_socket_for_http, TcpStreamTLS};
+// use log::info;
 use tokio::net::TcpStream;
 use async_trait::async_trait;
 
@@ -33,7 +34,7 @@ impl UnderlyingRepo for UnderlyingRepoImpl {
         let mut res = Vec::new();
         read_bytes_from_socket_for_http(&mut stream, &mut res).await?;
 
-        // this is for debugging
+        // // this is for debugging
         // let res_str = match String::from_utf8(res.clone()) {
         //     Ok(value) => value,
         //     Err(err) => format!("err: {}", err)

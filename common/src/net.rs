@@ -271,17 +271,48 @@ pub async fn read_bytes_from_socket_for_http(stream: &mut TcpStreamTLS, res: &mu
         loop {
             // read hex str size of the current chunk
             let mut chunk_size_str = String::new();
-            while body_start < res.len() {
-                let byte = res[body_start] as char;
-                body_start += 1;
-                
-                if byte == '\r' {
-                    if body_start < res.len() && res[body_start] as char == '\n' {
-                        body_start += 1;
+            loop {
+                while body_start < res.len() {
+                    let byte = res[body_start] as char;
+                    body_start += 1;
+                    
+                    if byte == '\r' {
+                        if body_start < res.len() && res[body_start] as char == '\n' {
+                            body_start += 1;
+                            break;
+                        }
+                    } else {
+                        chunk_size_str.push(byte);
+                    }
+                }
+
+                // if we found the size
+                if !chunk_size_str.is_empty() {
+                    break;
+                }
+
+                // continue reading socket
+                break_cnt = 0;
+                prev_len = res.len();
+                loop {
+                    let n = stream.read(&mut buffer).await.map_err(|e| format!("Error reading socket: {}", e))?;
+                    res.extend_from_slice(&buffer[..n]);
+                    // found the chunk part
+                    if res[body_start - 1..].windows(2).any(|w| w == b"\r\n") {
                         break;
                     }
-                } else {
-                    chunk_size_str.push(byte);
+
+                    // try at most the break_limit for any empty transfer
+                    let curr_len = res.len();
+                    if prev_len == curr_len {
+                        if break_cnt == break_limit {
+                            info!("Socket reading break limit exceeded");
+                            break;
+                        }
+                        break_cnt += 1;
+                    }
+                    
+                    prev_len = curr_len;
                 }
             }
             

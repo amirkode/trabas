@@ -161,7 +161,8 @@ pub async fn tunnel_receiver_handler(
                     Ok(res) => {
                         PublicResponse::new(public_request.id.clone(), res.clone())
                     },
-                    Err(_) => {
+                    Err(err) => {
+                        error!("Request [{}] cannot be processed: {}", public_request.id.clone(), err);
                         let msg = String::from("Request cannot be processed");
                         let res = http_json_response_as_bytes(
                             HttpResponse::new(false, msg), StatusCode::from_u16(400).unwrap()).unwrap();

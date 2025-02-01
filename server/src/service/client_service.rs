@@ -25,4 +25,13 @@ impl ClientService {
         let now = SystemTime::now();
         self.client_repo.set_dc(id.clone(), now).await
     }
+
+    pub async fn check_client_validity(&self, id: String) -> bool {
+        let rec = match self.client_repo.get(id).await {
+            Ok(value) => value,
+            Err(_) => return false
+        };
+
+        rec.conn_dc_at == None
+    }
 }

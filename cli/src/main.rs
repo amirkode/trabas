@@ -1,6 +1,7 @@
 use clap::{error::ErrorKind, CommandFactory, Parser, Subcommand};
 use env_logger::{Env, Builder, Target};
 use common::config::init_env_from_config;
+use trabas::{PROJECT_NAME, PROJECT_VERSION};
 
 // TODO: complete help info
 #[derive(Parser)]
@@ -21,6 +22,7 @@ enum Commands {
         #[command(subcommand)]
         action: ServerActions,
     },
+    Version { }
 }
 
 // config arg keys for client
@@ -31,6 +33,7 @@ const CONFIG_ARG_CL_SERVER_SIGNING_KEY: &str = "server-signing-key";
 
 // config arg keys for server
 const CONFIG_ARG_SV_GEN_KEY: &str = "gen-key";
+const CONFIG_ARG_SV_KEY: &str = "key";
 const CONFIG_ARG_SV_REDIS_HOST: &str = "redis-host";
 const CONFIG_ARG_SV_REDIS_PORT: &str = "redis-port";
 const CONFIG_ARG_SV_REDIS_PASS: &str = "redis-pass";
@@ -99,6 +102,10 @@ enum ServerActions {
         // max number of requests in a time per client across service-wide
         #[arg(long)]
         client_request_limit: Option<u16>,
+        // cache client id in the cookie, so the next hit from browser
+        // does not have to define in the path
+        #[arg(long)]
+        cache_client_id: bool,
     },
     CacheConfig {
         #[command(subcommand)]
@@ -111,6 +118,12 @@ enum ServerActions {
             help="Generate server secret"
         )]
         gen_key: Option<Option<String>>,
+        #[arg(
+            name = CONFIG_ARG_SV_KEY, 
+            long,
+            help="Set server secret"
+        )]
+        key: Option<String>,
         #[arg(
             name = CONFIG_ARG_SV_REDIS_HOST, 
             long,
@@ -189,6 +202,10 @@ enum ServerCacheActions {
     }
 }
 
+fn show_version() {
+    println!("{} v{}", PROJECT_NAME, PROJECT_VERSION);
+}
+
 #[tokio::main]
 async fn main() {
     // init env vars
@@ -241,7 +258,7 @@ async fn main() {
             }
         },
         Commands::Server { action } => match action {
-            ServerActions::Run { host, public_port, client_port,  client_request_limit} => {
+            ServerActions::Run { host, public_port, client_port,  client_request_limit, cache_client_id} => {
                 let root_host = match host {
                     Some(value) => (*value).clone(),
                     None => String::from("127.0.0.1")
@@ -250,7 +267,7 @@ async fn main() {
                     Some(value) => *value,
                     None => 0
                 };
-                server::entry_point(root_host, *public_port, *client_port, client_request_limit).await
+                server::entry_point(root_host, *public_port, *client_port, client_request_limit, *cache_client_id).await
             },
             ServerActions::CacheConfig { action } => match action {
                 ServerCacheActions::List { } => {
@@ -263,17 +280,30 @@ async fn main() {
                     server::config::remove_cache_config((*client_id).clone(), (*method).clone(), (*path).clone()).await;
                 },
             },
-            ServerActions::SetConfig { gen_key, redis_host, redis_port, redis_pass, force } => {
-                if gen_key.is_none() && redis_host.is_none() && redis_port.is_none() && redis_pass.is_none() {
+            ServerActions::SetConfig { gen_key, key, redis_host, redis_port, redis_pass, force } => {
+                if gen_key.is_none() && key.is_none() && redis_host.is_none() && redis_port.is_none() && redis_pass.is_none() {
                     let mut cmd = Cli::command();
                     cmd.error(
                         ErrorKind::MissingRequiredArgument,
                         format!(
-                            "At least one of --{}, --{}, --{}, or --{} must be provided",
+                            "At least one of --{}, --{}, --{}, --{}, or --{} must be provided.",
                             CONFIG_ARG_SV_GEN_KEY,
+                            CONFIG_ARG_SV_KEY,
                             CONFIG_ARG_SV_REDIS_HOST,
                             CONFIG_ARG_SV_REDIS_PORT,
                             CONFIG_ARG_SV_REDIS_PASS
+                        )
+                    ).exit();
+                }
+
+                if gen_key.is_some() && key.is_some() {
+                    let mut cmd = Cli::command();
+                    cmd.error(
+                        ErrorKind::MissingRequiredArgument,
+                        format!(
+                            "Cannot set both --{} and --{} at once.",
+                            CONFIG_ARG_SV_GEN_KEY,
+                            CONFIG_ARG_SV_KEY
                         )
                     ).exit();
                 }
@@ -284,8 +314,11 @@ async fn main() {
                 }
 
                 // set redis config
-                server::config::set_redis_configs((*redis_host).clone(), (*redis_port).clone(), (*redis_pass).clone(), *force)
+                server::config::set_redis_configs((*key).clone(), (*redis_host).clone(), (*redis_port).clone(), (*redis_pass).clone(), *force)
             }
         },
+        Commands::Version { } => {
+            show_version();
+        }
     }
 }

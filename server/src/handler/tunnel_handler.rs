@@ -1,6 +1,13 @@
 
 use common::convert::{from_json_slice, to_json_vec};
-use common::net::{read_bytes_from_mutexed_socket, read_bytes_from_socket, prepare_packet, separate_packets, TcpStreamTLS, HEALTH_CHECK_PACKET_ACK};
+use common::net::{
+    read_bytes_from_mutexed_socket_for_internal, 
+    read_bytes_from_socket_for_internal,
+    prepare_packet,
+    separate_packets,
+    TcpStreamTLS,
+    HEALTH_CHECK_PACKET_ACK
+};
 use common::validate_signature;
 use log::{error, info};
 use tokio::net::TcpStream;
@@ -21,18 +28,28 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     let mut write_stream = TcpStreamTLS::from_tcp_write(write_stream);
     // register client ID
     let mut raw_response = Vec::new();
-    if let Err(e) = read_bytes_from_socket(&mut read_stream, &mut raw_response).await {
-        error!("{}", e);
+    if let Err(e) = read_bytes_from_socket_for_internal(&mut read_stream, &mut raw_response).await {
+        error!("Error reading connection: {}", e);
         return;
     }
+
+    let packets = separate_packets(raw_response);
+    let raw_response = match packets.get(0) {
+        Some(data) => data,
+        None => {
+            error!("Error reading connection: empty data");
+            return;
+        }
+    };
 
     info!("Done reading connection");
     let client: TunnelClient = match from_json_slice(&raw_response) {
         Some(value) => value,
         None => {
             let err_msg = format!("Invalid request");
+            let packet = prepare_packet(Vec::from(err_msg.as_bytes()));
             error!("{}", err_msg);
-            write_stream.write_all(err_msg.as_bytes()).await.unwrap();
+            write_stream.write_all(&packet).await.unwrap();
             return;    
         }
     };
@@ -40,15 +57,17 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     // validate connection before registering client
     if !validate_connection(client.signature.clone(), client.id.clone()) {
         let err_msg = format!("Client Registration Denied. client_id: {}, signature: {}", client_id, client.signature);
+        let packet = prepare_packet(Vec::from(err_msg.as_bytes()));
         error!("{}", err_msg);
-        write_stream.write_all(err_msg.as_bytes()).await.unwrap();
+        write_stream.write_all(&packet).await.unwrap();
         return;
     } else {
         // acknowledge the successful handshake
         let ok = b"ok";
+        let packet = prepare_packet(Vec::from(ok));
         let msg = format!("Client Registration Successful. client_id: {}, signature: {}", client_id, client.signature);
         info!("{}", msg);
-        write_stream.write_all(ok).await.unwrap();
+        write_stream.write_all(&packet).await.unwrap();
     }
 
     // sleep for 1.5 seconds to prevent race condition with healthcheck packet
@@ -64,15 +83,20 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     let public_service_arc1 = Arc::new(Mutex::new(public_service));
     let public_service_arc2 = public_service_arc1.clone();
 
+    // share handler stop state between sender and reciever
+    let handler_stopped1 = Arc::new(Mutex::new(false));
+    let handler_stopped2 = handler_stopped1.clone();
+
+    // client ids for each handler
     let client_id1 = client_id.clone();
     let client_id2 = client_id.clone();
 
     // spawn handlers
     tokio::spawn(async move {
-        tunnel_sender_handler(write_stream_arc, public_service_arc1, client_service_arc1, client_id1).await;
+        tunnel_sender_handler(handler_stopped1, write_stream_arc, public_service_arc1, client_service_arc1, client_id1).await;
     });
     tokio::spawn(async move {
-        tunnel_receiver_handler(read_stream_arc, public_service_arc2, client_service_arc2, client_id2).await;
+        tunnel_receiver_handler(handler_stopped2, read_stream_arc, public_service_arc2, client_service_arc2, client_id2).await;
     });
 }
 
@@ -109,11 +133,17 @@ fn validate_connection(signature: String, client_id: String) -> bool {
 // Phase 1 (implemented): Separate stream writer and reader
 // Phase 2 (might)      : Write data in chunks for all requests (This is also helpful for a large request).
 //                        But, we need to manage it efficiently to avoid any overheads.
-async fn tunnel_sender_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_service: Arc<Mutex<PublicService>>, client_service: Arc<Mutex<ClientService>>, client_id: String) {
+async fn tunnel_sender_handler(
+    handler_stopped: Arc<Mutex<bool>>,
+    stream: Arc<Mutex<TcpStreamTLS>>, 
+    public_service: Arc<Mutex<PublicService>>, 
+    client_service: Arc<Mutex<ClientService>>, 
+    client_id: String,
+) {
     info!("Tunnel sender handler started.");
     
     let mut skip = 0;
-    loop {
+    while !(*handler_stopped.lock().await) {
         // request from the queue
         match public_service.lock().await.dequeue_request(client_id.clone()).await {
             Ok(public_request) => {
@@ -139,27 +169,39 @@ async fn tunnel_sender_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_service:
                     if let Err(_) = stream.lock().await.write_all(&hc).await {
                         break;
                     }
-                    // sleep for 0.5 seconds
+                    // sleep for 100 ms
                     sleep(Duration::from_millis(100)).await;
                     skip = 0;
                 }
             }
         }
     }
-    
-    // disconnection
-    client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
+
+    if !(*handler_stopped.lock().await) {
+        // disconnect client
+        client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
+        info!("Client Disconnected. client_id: {}", client_id);
+    }
+
+    // update handler stop state
+    (*handler_stopped.lock().await) = true;
+
     info!("Tunnel sender handler stopped.");
-    info!("Client Disconnected. client_id: {}", client_id);
 }
 
-async fn tunnel_receiver_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_service: Arc<Mutex<PublicService>>, client_service: Arc<Mutex<ClientService>>, client_id: String) {
+async fn tunnel_receiver_handler(
+    handler_stopped: Arc<Mutex<bool>>,
+    stream: Arc<Mutex<TcpStreamTLS>>, 
+    public_service: Arc<Mutex<PublicService>>, 
+    client_service: Arc<Mutex<ClientService>>, 
+    client_id: String
+) {
     info!("Tunnel receiver handler started.");
 
-    loop {
+    while !(*handler_stopped.lock().await) {
         // get latest response from stream
         let mut raw_response = Vec::new();
-        if let Err(e) = read_bytes_from_mutexed_socket(stream.clone(), &mut raw_response).await {
+        if let Err(e) = read_bytes_from_mutexed_socket_for_internal(stream.clone(), &mut raw_response).await {
             error!("{}", e);
             break;
         }
@@ -187,9 +229,15 @@ async fn tunnel_receiver_handler(stream: Arc<Mutex<TcpStreamTLS>>, public_servic
             info!("Response received for request: {}.", response.request_id);
         }
     }
-    
-    // disconnection
-    client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
+
+    if !(*handler_stopped.lock().await) {
+        // disconnect client
+        client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
+        info!("Client Disconnected. client_id: {}", client_id);
+    }
+
+    // update handler stop state
+    (*handler_stopped.lock().await) = true;
+
     info!("Tunnel receiver handler stopped.");
-    info!("Client Disconnected. client_id: {}", client_id);
 }

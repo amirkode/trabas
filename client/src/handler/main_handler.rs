@@ -6,7 +6,14 @@ use common::{
     convert::{from_json_slice, to_json_vec}, 
     data::dto::{public_request::PublicRequest, public_response::PublicResponse, tunnel_client::TunnelClient}, 
     net::{
-        http_json_response_as_bytes, prepare_packet, read_bytes_from_mutexed_socket, read_string_from_socket, separate_packets, HttpResponse, TcpStreamTLS, HEALTH_CHECK_PACKET_ACK
+        http_json_response_as_bytes,
+        prepare_packet,
+        read_bytes_from_mutexed_socket_for_internal,
+        read_string_from_socket_for_internal,
+        separate_packets,
+        HttpResponse,
+        TcpStreamTLS,
+        HEALTH_CHECK_PACKET_ACK
     }, 
     security::sign_value
 };
@@ -36,7 +43,7 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         let tcp_stream = match TcpStream::connect(server_address.clone()).await {
             Ok(ok) => ok,
             Err(e) => {
-                error!("Error connecting to {}: {}", server_host, e);
+                error!("Error connecting to [{}]: {}", server_address.clone(), e);
                 continue;
             }
         };
@@ -57,17 +64,17 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
          };
         // send connection request to server service
         let tunnel_client = get_tunnel_client();
-        let bytes_req = to_json_vec(&tunnel_client);
+        let packet = prepare_packet(to_json_vec(&tunnel_client));
 
         info!("Connecting to server service...");
-        if let Err(e) = write_stream.write_all(&bytes_req).await {
+        if let Err(e) = write_stream.write_all(&packet).await {
             error!("Error connecting to server service: {}", e);
             continue;
         }
 
         // check if the server handshake was successful
         let mut ok: String = Default::default();
-        if let Err(e) = read_string_from_socket(&mut read_stream, &mut ok).await {
+        if let Err(e) = read_string_from_socket_for_internal(&mut read_stream, &mut ok).await {
             error!("Error connecting to server service: {}", e);
             continue;
         }
@@ -77,7 +84,6 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         }
 
         info!("Connected to server service.");
-
         
         // create channel for request queue
         let (tx, rx) = mpsc::channel::<PublicResponse>(5);
@@ -88,22 +94,26 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         let read_stream_mutex = Arc::new(Mutex::new(read_stream));
         let write_stream_mutex = Arc::new(Mutex::new(write_stream));
         
-        // TODO: add break flag if one of the handlers stopped (?)
+        // share handler stop state between sender and reciever
+        let handler_stopped1 = Arc::new(Mutex::new(false));
+        let handler_stopped2 = handler_stopped1.clone();
 
         // spawn handlers
         let cloned_underlying_host = underlying_host.clone();
         let cloned_service = service.clone();
         let receiver_handler = tokio::spawn(async move {
-            tunnel_receiver_handler(read_stream_mutex, tx_mutex, cloned_underlying_host, cloned_service).await;
+            tunnel_receiver_handler(handler_stopped1, read_stream_mutex, tx_mutex, cloned_underlying_host, cloned_service).await;
         });
         let sender_handler = tokio::spawn(async move {
-            tunnel_sender_handler(write_stream_mutex, rx_mutex).await;
+            tunnel_sender_handler(handler_stopped2, write_stream_mutex, rx_mutex).await;
         });
 
         // wait until released
         receiver_handler.await.unwrap_or_default();
         sender_handler.await.unwrap_or_default();
     }
+
+    info!("Max server binding retries exceeded.");
 }
 
 fn get_tunnel_client() -> TunnelClient {
@@ -115,12 +125,18 @@ fn get_tunnel_client() -> TunnelClient {
     TunnelClient::new(client_id, signature)
 }
 
-pub async fn tunnel_receiver_handler(stream: Arc<Mutex<TcpStreamTLS>>, tx: Arc<Mutex<Sender<PublicResponse>>>, underlying_host: String, service: UnderlyingService) {
+pub async fn tunnel_receiver_handler(
+    handler_stopped: Arc<Mutex<bool>>,
+    stream: Arc<Mutex<TcpStreamTLS>>, 
+    tx: Arc<Mutex<Sender<PublicResponse>>>, 
+    underlying_host: String, 
+    service: UnderlyingService
+) {
     info!("Tunnel receiver handler started.");
-    loop {
+    while !(*handler_stopped.lock().await) {
         // get incoming request server service to forward
         let mut request = Vec::new();
-        if let Err(e) = read_bytes_from_mutexed_socket(stream.clone(), &mut request).await {
+        if let Err(e) = read_bytes_from_mutexed_socket_for_internal(stream.clone(), &mut request).await {
             error!("{}", e);
             break;
         }
@@ -145,7 +161,8 @@ pub async fn tunnel_receiver_handler(stream: Arc<Mutex<TcpStreamTLS>>, tx: Arc<M
                     Ok(res) => {
                         PublicResponse::new(public_request.id.clone(), res.clone())
                     },
-                    Err(_) => {
+                    Err(err) => {
+                        error!("Request [{}] cannot be processed: {}", public_request.id.clone(), err);
                         let msg = String::from("Request cannot be processed");
                         let res = http_json_response_as_bytes(
                             HttpResponse::new(false, msg), StatusCode::from_u16(400).unwrap()).unwrap();
@@ -154,19 +171,26 @@ pub async fn tunnel_receiver_handler(stream: Arc<Mutex<TcpStreamTLS>>, tx: Arc<M
                 };
         
                 if let Ok(_) = cloned_tx.lock().await.send(public_response).await {
-                    info!("Response for request {} received in {} seconds and was enqueued to foward back", public_request.id, start_request.elapsed().as_secs());
+                    info!("Response for request {} received in {} seconds and was enqueued to forward back", public_request.id, start_request.elapsed().as_secs());
                 }
             });
         }
     }
 
+    // update handler stop state
+    (*handler_stopped.lock().await) = true;
+
     info!("Tunnel receiver handler stopped.");
 }
 
-pub async fn tunnel_sender_handler(stream: Arc<Mutex<TcpStreamTLS>>, rx: Arc<Mutex<Receiver<PublicResponse>>>) {
+pub async fn tunnel_sender_handler(
+    handler_stopped: Arc<Mutex<bool>>,
+    stream: Arc<Mutex<TcpStreamTLS>>,
+    rx: Arc<Mutex<Receiver<PublicResponse>>>
+) {
     info!("Tunnel sender handler started.");
     let mut skip = 0;
-    loop {
+    while !(*handler_stopped.lock().await) {
         // get ready public responses from the queue
         if let Some(public_response) = rx.lock().await.recv().await {
             info!("Response for request: {} is available.", public_response.request_id);
@@ -186,12 +210,15 @@ pub async fn tunnel_sender_handler(stream: Arc<Mutex<TcpStreamTLS>>, rx: Arc<Mut
                 if let Err(_) = stream.lock().await.write_all(&hc).await {
                     break;
                 }
-                // sleep for 0.5 seconds
+                // sleep for 100 ms
                 sleep(Duration::from_millis(100)).await;
                 skip = 0;
             }
         }
     }
+
+    // update handler stop state
+    (*handler_stopped.lock().await) = true;
 
     info!("Tunnel sender handler stopped.");
 }

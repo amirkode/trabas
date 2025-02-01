@@ -11,12 +11,13 @@ pub mod data;
 pub mod handler; 
 pub mod service;
 
+// TODO: too many parameters, bind it in a data struct
 pub async fn entry_point(host: Option<String>, port: u16, use_tls: bool) {
     validate_configs();
     
     let underlying_svc_address = match host {
         Some(h) => format!("{}:{}", h, port),
-        None => format!("0.0.0.0:{}", port)
+        None => format!("127.0.0.1:{}", port)
     };    
     
     // init repo to be injected

@@ -13,7 +13,7 @@ foo@bar:~$ docker build -t [image tag] .
 ```
 In the predefined Docker config, the public port and client port respectively will be `8787` and `8789` in the docker container. You can run it with this command:
 ```console
-foo@bar:~$ docker run -d -p [exposed port]:8787 -p [exposed port]:8789 [image tag] --name [container name]
+foo@bar:~$ docker run -d -p [exposed public port]:8787 -p [exposed client port]:8789 [image tag] --name [container name]
 ```
 If it's successful, the log will show:
 ```console

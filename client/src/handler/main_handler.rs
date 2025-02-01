@@ -33,7 +33,7 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
     while max_tries > 0 {
         if max_tries < 1000 {
             // add break interval for 5 seconds
-            info!("Break for 5 second for the next attempt");
+            info!("Break for 5 seconds for the next attempt");
             sleep(Duration::from_secs(5)).await;
         }
 
@@ -56,7 +56,7 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
             let connector = TlsConnector::from(connector);
             let tls_stream = connector.connect(server_host.as_str(), tcp_stream).await.unwrap();
             let (read_stream, write_stream) = tokio::io::split(tls_stream);
-            info!("TLS Bound -> address: {}", server_address.clone());
+            info!("TLS Bound to address: {}", server_address.clone());
             (TcpStreamTLS::from_tcp_tls_read(read_stream), TcpStreamTLS::from_tcp_tls_write(write_stream))
         } else { 
             let (read_stream, write_stream) = tokio::io::split(tcp_stream);

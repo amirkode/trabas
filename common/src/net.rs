@@ -462,20 +462,25 @@ impl<'a> HttpReader<'a> {
             .lines()
             .find_map(|line| line.strip_prefix("Connection:").map(|len| len.trim().to_lowercase().to_string()));
 
-        if let Some(content_type) = content_type {
-            // TODO: implement content type specific handler
-            if content_type == "application/octet-stream" {
-                // for example:
-                // in this type, we just need to check until the connection is closed (read length: 0)
-            }
-        }
-
         if is_chunked {
             self.read_by_chunk_size(res, headers_end).await?;
         } else if let Some(len) = content_length {
             self.read_by_content_len(res, headers_end, len).await?;
-        } else if connection.unwrap_or(String::from("close")) == "close" {
-            self.read_until_close(res).await?;
+        } else {
+            let mut read_until_closed = connection.unwrap_or(String::from("")) == "close";
+            if !read_until_closed {
+                let content_type = content_type.unwrap_or(String::from(""));
+                // TODO: implement content type specific handler
+                if content_type == "application/octet-stream" {
+                    // for example:
+                    // in this type, we just need to check until the connection is closed (read length: 0)
+                    read_until_closed = true;
+                }
+            }
+
+            if read_until_closed {
+                self.read_until_close(res).await?;
+            }
         }
 
         Ok(())

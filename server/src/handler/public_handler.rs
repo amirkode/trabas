@@ -5,8 +5,8 @@ use chrono::Utc;
 use common::convert::{parse_request_bytes, request_to_bytes, modify_headers_of_response_bytes};
 use common::net::{
     http_json_response_as_bytes,
-    read_bytes_from_socket_for_http,
     get_cookie_from_request,
+    HttpReader,
     HttpResponse,
     TcpStreamTLS
 };
@@ -48,8 +48,8 @@ async fn public_handler(
 ) -> () {
     // read data as bytes
     let mut raw_request = Vec::new();
-    if let Err(e) = read_bytes_from_socket_for_http(&mut stream, &mut raw_request).await {
-        error!("{}", e);
+    if let Err(e) = HttpReader::from_tcp_stream(&mut stream).read(&mut raw_request).await {
+        error!("Error reading incoming request: {}", e);
         return;
     }
 

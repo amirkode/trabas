@@ -2,6 +2,7 @@ version: '3.8'
 services:
   nginx:
     image: nginx:alpine
+    container_name: trabas_nginx
     ports:
       - "3377:3377"
     volumes:

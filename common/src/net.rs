@@ -151,7 +151,7 @@ pub async fn read_bytes_from_socket_for_internal(stream: &mut TcpStreamTLS, res:
         let curr_len = res.len();
         if prev_len == curr_len {
             if break_cnt == break_limit {
-                info!("Socket reading break limit exceeded");
+                // Socket reading break limit exceeded
                 break;
             }
             break_cnt += 1;
@@ -187,7 +187,7 @@ pub async fn read_bytes_from_mutexed_socket_for_internal(stream: Arc<Mutex<TcpSt
         let curr_len = res.len();
         if prev_len == curr_len {
             if break_cnt == break_limit {
-                info!("Socket reading break limit exceeded");
+                // Socket reading break limit exceeded
                 break;
             }
             break_cnt += 1;

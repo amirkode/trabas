@@ -36,8 +36,8 @@ jobs:
           git add bin/linux/trabas
           # Only commit if there are changes
           if ! git diff --cached --quiet; then
-            git remote set-url origin https://${{ secrets.AGENT_USERNAME }}:${{ secrets.AGENT_PAT }}@github.com/amirkode/trabas.git
             git commit -m "Binary updated [skip ci]"
+            git remote set-url origin https://${{ secrets.AGENT_USERNAME }}:${{ secrets.AGENT_PAT }}@github.com/amirkode/trabas.git
             git push origin improve-performance
           else
             echo "No changes in binary to commit."

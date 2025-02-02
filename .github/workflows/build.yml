@@ -45,9 +45,9 @@ jobs:
       - name: Commit built binary
         if: success()
         run: |
-          git pull https://x-access-token:${GITHUB_TOKEN}@github.com/amirkode/trabas.git HEAD:improve-performance
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin improve-performance
           git add .
           git commit -m "Binary updated: $RUNNER_OS [skip ci]"
           git push https://x-access-token:${GITHUB_TOKEN}@github.com/amirkode/trabas.git HEAD:improve-performance

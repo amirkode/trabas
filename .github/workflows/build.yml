@@ -1,0 +1,43 @@
+name: Build and Deploy Binary
+
+on:
+  push:
+    branches:
+      - improve-performance
+
+jobs:
+  build:
+    # Prevent running the job if the commit message contains "[skip ci]"
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Build Release Binary
+        run: cargo build --release --manifest-path cli/Cargo.toml
+
+      - name: Copy binary to target folder
+        run: |
+          mkdir -p bin/linux
+          cp target/release/trabas bin/linux/
+
+      - name: Commit built binary
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bin/linux/trabas
+          # Only commit if there are changes
+          if ! git diff --cached --quiet; then
+            git commit -m "Update binary [skip ci]"
+            git push origin improve-performance
+          else
+            echo "No changes in binary to commit."
+          fi

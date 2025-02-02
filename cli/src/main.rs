@@ -34,6 +34,7 @@ const CONFIG_ARG_CL_SERVER_SIGNING_KEY: &str = "server-signing-key";
 // config arg keys for server
 const CONFIG_ARG_SV_GEN_KEY: &str = "gen-key";
 const CONFIG_ARG_SV_KEY: &str = "key";
+const CONFIG_ARG_SV_REDIS_ENABLE: &str = "redis-enable";
 const CONFIG_ARG_SV_REDIS_HOST: &str = "redis-host";
 const CONFIG_ARG_SV_REDIS_PORT: &str = "redis-port";
 const CONFIG_ARG_SV_REDIS_PASS: &str = "redis-pass";
@@ -124,6 +125,12 @@ enum ServerActions {
             help="Set server secret"
         )]
         key: Option<String>,
+        #[arg(
+            name = CONFIG_ARG_SV_REDIS_ENABLE, 
+            long,
+            help="Whether the Redis is enabled"
+        )]
+        redis_enable: Option<String>,
         #[arg(
             name = CONFIG_ARG_SV_REDIS_HOST, 
             long,
@@ -280,15 +287,16 @@ async fn main() {
                     server::config::remove_cache_config((*client_id).clone(), (*method).clone(), (*path).clone()).await;
                 },
             },
-            ServerActions::SetConfig { gen_key, key, redis_host, redis_port, redis_pass, force } => {
-                if gen_key.is_none() && key.is_none() && redis_host.is_none() && redis_port.is_none() && redis_pass.is_none() {
+            ServerActions::SetConfig { gen_key, key, redis_enable, redis_host, redis_port, redis_pass, force } => {
+                if gen_key.is_none() && key.is_none() && redis_enable.is_none() && redis_host.is_none() && redis_port.is_none() && redis_pass.is_none() {
                     let mut cmd = Cli::command();
                     cmd.error(
                         ErrorKind::MissingRequiredArgument,
                         format!(
-                            "At least one of --{}, --{}, --{}, --{}, or --{} must be provided.",
+                            "At least one of --{}, --{}, --{}, --{}, --{}, or --{} must be provided.",
                             CONFIG_ARG_SV_GEN_KEY,
                             CONFIG_ARG_SV_KEY,
+                            CONFIG_ARG_SV_REDIS_ENABLE,
                             CONFIG_ARG_SV_REDIS_HOST,
                             CONFIG_ARG_SV_REDIS_PORT,
                             CONFIG_ARG_SV_REDIS_PASS
@@ -314,7 +322,7 @@ async fn main() {
                 }
 
                 // set redis config
-                server::config::set_redis_configs((*key).clone(), (*redis_host).clone(), (*redis_port).clone(), (*redis_pass).clone(), *force)
+                server::config::set_server_configs((*key).clone(), (*redis_enable).clone(), (*redis_host).clone(), (*redis_port).clone(), (*redis_pass).clone(), *force)
             }
         },
         Commands::Version { } => {

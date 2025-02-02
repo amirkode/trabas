@@ -18,6 +18,10 @@ impl CacheService {
         CacheService { cache_repo }
     }
 
+    pub fn is_enabled(&self) -> bool {
+        self.cache_repo.enabled()
+    }
+
     fn get_cache_key(&self, client_id: String, uri: String, method: String, body: Vec<u8>) -> String {
         let mut hasher = Sha256::new();
         hasher.update(client_id.as_bytes());

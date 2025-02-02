@@ -36,6 +36,6 @@ impl ResponseRepo for MockResponseRepo {
             }
         }
         
-        Err(String::from("Data not found"))        
+        Err(String::from("Data not found"))
     }
 }

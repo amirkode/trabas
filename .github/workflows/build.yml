@@ -9,7 +9,11 @@ jobs:
   build:
     # Prevent running the job if the commit message contains "[skip ci]"
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
 
     steps:
       - name: Checkout Repository
@@ -24,15 +28,22 @@ jobs:
       - name: Build Release Binary
         run: cargo build --release --manifest-path cli/Cargo.toml
 
-      - name: Copy binary to target folder
+      - name: Rename and Move Binary
         run: |
-          mkdir -p bin/linux
-          cp target/release/trabas bin/linux/
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            mkdir -p bin/linux
+            mv target/release/trabas bin/linux/trabas
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            mkdir -p bin/linux
+            mv target/release/trabas.exe bin/windows/trabas.exe
+          fi
+        shell: bash
 
       - name: Commit built binary
+        if: success()
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add bin/linux/trabas
+          git add .
           git commit -m "Binary updated [skip ci]"
           git push https://x-access-token:${GITHUB_TOKEN}@github.com/amirkode/trabas.git HEAD:improve-performance

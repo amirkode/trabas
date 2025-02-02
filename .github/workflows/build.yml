@@ -3,7 +3,7 @@ name: Build and Deploy Binary
 on:
   push:
     branches:
-      - improve-performance
+      - main
 
 jobs:
   build:
@@ -48,8 +48,8 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git stash
-          git pull --rebase origin improve-performance
+          git pull --rebase origin main
           git stash pop
           git add .
           git commit -m "Binary updated: $RUNNER_OS [skip ci]"
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/amirkode/trabas.git HEAD:improve-performance
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/amirkode/trabas.git HEAD:main

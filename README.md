@@ -21,7 +21,7 @@ This tool consists of two services:
     - Forwards request received from server service to the underlying service.
 
 ### Install
-To use the tool, you can use the all-in-one binary available from the latest release (coming soon).
+To use the tool, you can use the all-in-one binary available from the latest release (coming soon) or the latest binary based on `main` branch in `/bin` directory.
 Alternatively, you may to build binary file using cargo:
 ```bash
 git clone https://github.com/amirkode/trabas.git && cd trabas

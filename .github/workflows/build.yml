@@ -37,7 +37,6 @@ jobs:
             mkdir -p bin/linux
             mv target/release/trabas.exe bin/windows/trabas.exe
           fi
-        shell: bash
 
       - name: Commit built binary
         if: success()

@@ -24,7 +24,7 @@ fn get_env_path() -> String {
 
 // load all configs from .env file into map
 // using BTreeMap to get ordered keys
-pub fn get_config() -> BTreeMap<String, String> {
+pub fn get_configs() -> BTreeMap<String, String> {
     let env_path = get_env_path();
     let file = File::open(env_path);
     let mut map = BTreeMap::new();
@@ -59,7 +59,7 @@ pub fn set_configs(values: HashMap<String, String>) {
     }
     
     // fecth existing env vars
-    let mut config = get_config();
+    let mut config = get_configs();
     for (key, value) in values {
         config.insert(key, value);
     }

@@ -7,11 +7,11 @@ pub mod config;
 use std::sync::Arc;
 use log::info;
 
-use config::validate_configs;
-use data::repository::cache_repo::{CacheRepo, CacheRepoImpl};
-use data::repository::client_repo::{ClientRepo, ClientRepoImpl};
-use data::repository::request_repo::{RequestRepo, RequestRepoImpl};
-use data::repository::response_repo::{ResponseRepo, ResponseRepoImpl};
+use config::{validate_configs, CONFIG_KEY_SERVER_REDIS_ENABLE};
+use data::repository::cache_repo::{CacheRepo, CacheRepoRedisImpl, CacheRepoProcMemImpl};
+use data::repository::client_repo::{ClientRepo, ClientRepoRedisImpl, ClientRepoProcMemImpl};
+use data::repository::request_repo::{RequestRepo, RequestRepoRedisImpl, RequestRepoProcMemImpl};
+use data::repository::response_repo::{ResponseRepo, ResponsRepoRedisImpl, ResponsRepoProcMemImpl};
 use data::store::redis::RedisDataStore;
 use handler::public_handler::register_public_handler;
 use handler::tunnel_handler::register_tunnel_handler;
@@ -30,32 +30,57 @@ pub async fn entry_point(
     client_request_limit: u16,
     cache_client_id: bool
 ) {
-    validate_configs();
+    // validate required configs
+    let configs = validate_configs();
+    let use_redis_default = "false".to_string();
+    let use_redis = *configs.get(CONFIG_KEY_SERVER_REDIS_ENABLE).unwrap_or(&use_redis_default) == "true".to_string();
+
     let public_svc_address = format!("{}:{}", root_host, public_port);
     let client_svc_address = format!("{}:{}", root_host, client_port);
 
-    // TODO: add retrier if connection attempt is failed
-    info!("Redis: connecting...");
-    let redis_store = RedisDataStore::new().unwrap();
-    let redis_connection = redis_store.client.get_multiplexed_async_connection().await.unwrap();
-    info!("Redis: connected");
+    if use_redis {
+        // store data in redis
+        // TODO: add retrier if connection attempt is failed
+        info!("Redis: connecting...");
+        let redis_store = RedisDataStore::new().unwrap();
+        let redis_connection = redis_store.client.get_multiplexed_async_connection().await.unwrap();
+        info!("Redis: connected");
 
-    // init repo to be injected
-    let cache_repo = Arc::new(CacheRepoImpl::new(redis_connection.clone()));
-    let client_repo = Arc::new(ClientRepoImpl::new(redis_connection.clone()));
-    let request_repo = Arc::new(RequestRepoImpl::new(redis_connection.clone()));
-    let response_repo = Arc::new(ResponseRepoImpl::new(redis_connection.clone()));
-    // run the services
-    run(
-        public_svc_address,
-        client_svc_address,
-        client_request_limit,
-        cache_client_id,
-        cache_repo,
-        client_repo,
-        request_repo,
-        response_repo
-    ).await;
+        // init repo to be injected
+        let cache_repo = Arc::new(CacheRepoRedisImpl::new(redis_connection.clone()));
+        let client_repo = Arc::new(ClientRepoRedisImpl::new(redis_connection.clone()));
+        let request_repo = Arc::new(RequestRepoRedisImpl::new(redis_connection.clone()));
+        let response_repo = Arc::new(ResponsRepoRedisImpl::new(redis_connection.clone()));
+        // run the services
+        run(
+            public_svc_address,
+            client_svc_address,
+            client_request_limit,
+            cache_client_id,
+            cache_repo,
+            client_repo,
+            request_repo,
+            response_repo
+        ).await;
+    } else {
+        // store data in trabas process
+        // init repo to be injected
+        let cache_repo = Arc::new(CacheRepoProcMemImpl::new());
+        let client_repo = Arc::new(ClientRepoProcMemImpl::new());
+        let request_repo = Arc::new(RequestRepoProcMemImpl::new());
+        let response_repo = Arc::new(ResponsRepoProcMemImpl::new());
+        // run the services
+        run(
+            public_svc_address,
+            client_svc_address,
+            client_request_limit,
+            cache_client_id,
+            cache_repo,
+            client_repo,
+            request_repo,
+            response_repo
+        ).await;
+    }
 }
 
 // TODO: implement app level TCP Listener with TLS for Client Connection

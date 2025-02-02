@@ -21,6 +21,11 @@ impl MockCacheRepo {
 
 #[async_trait]
 impl CacheRepo for MockCacheRepo {
+    
+    fn enabled(&self) -> bool {
+        true
+    }
+    
     async fn get(&self, key: String) -> Result<Cache, String> {
         if let Some(value) = self.mock_cache.lock().await.get(&key) {
             return Ok((*value).clone());

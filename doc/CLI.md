@@ -42,9 +42,10 @@ Option | Type | Description |
 --- | --- | --- |
 `--gen-key` | No value [Optional] | Generate server secret |
 `--key` | String [Optional] | Manual set server secret |
-`--redis-host` | Integer | Host for redis |
-`--redis-port` | Integer | Port for redis |
-`--redis-pass` | Integer | Password redis |
+`--redis-enable` | String | Enable flag whether to use redis for temporary transfer store. The value is either `true` or `false` |
+`--redis-host` | String | Host for redis |
+`--redis-port` | String | Port for redis |
+`--redis-pass` | String | Password redis |
 `--force` | No value [Optional] | Force rewrite all configs that has been set |
 #### Example
 ```console
@@ -52,6 +53,8 @@ foo@bar:~$ trabas server set-config --get-key --redis-host localhost --redis-por
 ```
 #### `trabas server cache-config set`
 Setting cache configuration for specific requests.
+
+NOTE: This is only available when Redis is enabled.
 #### Options
 Option | Type | Description |
 --- | --- | --- |
@@ -65,6 +68,8 @@ foo@bar:~$ trabas server cache-config set --client-id client1 --method GET --pat
 ```
 #### `trabas server cache-config list`
 Show all cache configurations for specific requests.
+
+NOTE: This is only available when Redis is enabled.
 ### `trabas client`
 Manage client service.
 ### Sub commands

@@ -32,7 +32,7 @@ impl RequestRepo for MockRequestRepo {
 
     async fn pop_front(&self, client_id: String) -> Result<PublicRequest, String> {
         if let Some(queue) = self.mock_request_data.lock().await.get_mut(&client_id) {
-            if let Some(res) = queue.pop_back() {
+            if let Some(res) = queue.pop_front() {
                 return Ok(res)
             }
         }

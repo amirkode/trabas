@@ -71,7 +71,7 @@ foo@bar:~$ openssl verify -CAfile ca.crt server.crt
 
 **Setting up NGINX proxy**
 
-We provide `docker compose`configs for the NGINX. You can find it in this directory of the project `docker/server/serve_with_nginx`.
+We provide `docker compose`configs for the NGINX. You can find it in this directory of the project `docker/server/serve_tls_with_nginx`.
 
 The steps are as follows:
 
@@ -84,7 +84,14 @@ The steps are as follows:
     ```
 - The NGINX will listen to port `3377` (you may change as you wish in the `docker-compose.yml`).
 
-**Setting up Client Service**
+### Run everything with Docker Compose
+Above operations might take time. We also provide a `Docker Compose` file to run both trabas service and NGINX altogether. You could find in this directory: `docker/server/docker-compose.yml`. CD to the directory and just run:
+```console
+foo@bar:~$ docker compose up -d
+```
+Ensure you have everything set (e.g. nginx.conf, ssl, etc.).
+## Client Setup
+### Setting up Client Service
 
 Trabas has supported TLS connection from client service. You can follow these steps:
 - In your client host machine (local), copy the generated `ca.crt` to `[bin directory]/trabas_config/`.

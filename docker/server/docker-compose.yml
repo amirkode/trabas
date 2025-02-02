@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+    container_name: trabas_server
+    ports:
+      - "127.0.0.1:8787:8787"
+    networks:
+      - trabas_network
+
+  nginx:
+    image: nginx:alpine
+    container_name: trabas_nginx
+    ports:
+      - "3377:3377"
+    volumes:
+      - ./serve_tls_with_nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./serve_tls_with_nginx/ssl:/etc/nginx/ssl:ro
+    restart: always
+    networks:
+      - trabas_network
+    depends_on:
+      - app
+
+networks:
+  trabas_network:
+    driver: bridge

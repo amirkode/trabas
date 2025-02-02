@@ -52,4 +52,4 @@ jobs:
           git stash pop
           git add .
           git commit -m "Binary updated: $RUNNER_OS [skip ci]"
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/amirkode/trabas.git HEAD:main
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/amirkode/trabas.git HEAD:main --force

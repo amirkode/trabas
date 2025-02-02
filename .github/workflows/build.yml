@@ -31,9 +31,8 @@ jobs:
 
       - name: Commit built binary
         run: |
-          git remote set-url origin https://${{ secrets.AGENT_USERNAME }}:${{ secrets.AGENT_PAT }}@github.com/amirkode/trabas.git
-          git config user.name "${{ secrets.AGENT_USERNAME }}"
-          git config user.email "${{ secrets.AGENT_EMAIL }}"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add bin/linux/trabas
           git commit -m "Binary updated [skip ci]"
-          git push origin improve-performance
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/amirkode/trabas.git HEAD:improve-performance

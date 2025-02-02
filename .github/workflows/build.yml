@@ -39,6 +39,7 @@ jobs:
             mkdir -p bin/windows
             mv target/release/trabas.exe bin/windows/trabas-$TIMESTAMP.exe
           fi
+        shell: bash
 
       - name: Commit built binary
         if: success()

@@ -32,10 +32,11 @@ jobs:
         run: |
           TIMESTAMP=$(date +'%Y%m%d%H%M%S')
           if [ "$RUNNER_OS" == "Linux" ]; then
+            rm -rf bin/linux
             mkdir -p bin/linux
             mv target/release/trabas bin/linux/trabas-$TIMESTAMP
           elif [ "$RUNNER_OS" == "Windows" ]; then
-            rmdir /s /q bin/windows || echo "Bin folder does not exist."
+            rm -rf bin/windows
             mkdir -p bin/windows
             mv target/release/trabas.exe bin/windows/trabas-$TIMESTAMP.exe
           fi

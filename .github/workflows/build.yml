@@ -23,6 +23,10 @@ jobs:
           toolchain: stable
           override: true
 
+      - name: Extract Version from Cargo.toml
+        id: get_version
+        run: echo "VERSION=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[0].version')" >> $GITHUB_ENV
+
       - name: Build Release Binary
         run: cargo build --release --manifest-path cli/Cargo.toml
 
@@ -30,12 +34,12 @@ jobs:
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: trabas
+          name: trabas-${{ env.VERSION }}-linux
           path: target/release/trabas
 
       - name: Upload Artifact (Windows)
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: trabas.exe
+          name: trabas-${{ env.VERSION }}-windows.exe
           path: target/release/trabas.exe

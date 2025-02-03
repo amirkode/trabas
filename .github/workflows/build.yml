@@ -28,14 +28,14 @@ jobs:
 
       - name: Upload Artifact (Linux)
         if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: trabas
           path: target/release/trabas
 
       - name: Upload Artifact (Windows)
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: trabas.exe
           path: target/release/trabas.exe

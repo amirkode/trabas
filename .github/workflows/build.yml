@@ -1,4 +1,4 @@
-name: Build and Deploy Binary
+name: Build Binary
 
 on:
   push:
@@ -7,8 +7,6 @@ on:
 
 jobs:
   build:
-    # Prevent running the job if the commit message contains "[skip ci]"
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -25,31 +23,24 @@ jobs:
           toolchain: stable
           override: true
 
+      - name: Extract Version from Cargo.toml
+        id: get_version
+        shell: bash
+        run: echo "VERSION=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[0].version')" >> $GITHUB_ENV
+
       - name: Build Release Binary
         run: cargo build --release --manifest-path cli/Cargo.toml
 
-      - name: Rename and Move Binary
-        run: |
-          TIMESTAMP=$(date +'%Y%m%d%H%M%S')
-          if [ "$RUNNER_OS" == "Linux" ]; then
-            rm -rf bin/linux
-            mkdir -p bin/linux
-            mv target/release/trabas bin/linux/trabas-$TIMESTAMP
-          elif [ "$RUNNER_OS" == "Windows" ]; then
-            rm -rf bin/windows
-            mkdir -p bin/windows
-            mv target/release/trabas.exe bin/windows/trabas-$TIMESTAMP.exe
-          fi
-        shell: bash
+      - name: Upload Artifact (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trabas-${{ env.VERSION }}-linux
+          path: target/release/trabas
 
-      - name: Commit built binary
-        if: success()
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git stash
-          git pull --rebase origin main
-          git stash pop
-          git add .
-          git commit -m "Binary updated: $RUNNER_OS [skip ci]"
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/amirkode/trabas.git HEAD:main --force
+      - name: Upload Artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trabas-${{ env.VERSION }}-windows
+          path: target/release/trabas.exe

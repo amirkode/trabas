@@ -1,9 +1,9 @@
-name: Build and Deploy Binary
+name: Build Binary
 
 on:
   push:
     branches:
-      - build-ci
+      - main
 
 jobs:
   build:
@@ -42,5 +42,5 @@ jobs:
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: trabas-${{ env.VERSION }}-windows.exe
+          name: trabas-${{ env.VERSION }}-windows
           path: target/release/trabas.exe

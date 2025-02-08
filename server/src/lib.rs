@@ -7,7 +7,8 @@ pub mod config;
 use std::sync::Arc;
 use log::info;
 
-use config::{validate_configs, CONFIG_KEY_SERVER_REDIS_ENABLE};
+use common::config::{ConfigHandler, ConfigHandlerImpl};
+use config::{validate_configs, get_cache_service, CONFIG_KEY_SERVER_REDIS_ENABLE};
 use data::repository::cache_repo::{CacheRepo, CacheRepoRedisImpl, CacheRepoProcMemImpl};
 use data::repository::client_repo::{ClientRepo, ClientRepoRedisImpl, ClientRepoProcMemImpl};
 use data::repository::request_repo::{RequestRepo, RequestRepoRedisImpl, RequestRepoProcMemImpl};
@@ -15,7 +16,6 @@ use data::repository::response_repo::{ResponseRepo, ResponsRepoRedisImpl, Respon
 use data::store::redis::RedisDataStore;
 use handler::public_handler::register_public_handler;
 use handler::tunnel_handler::register_tunnel_handler;
-use service::cache_service::CacheService;
 use service::client_service::ClientService;
 use service::public_service::PublicService;
 
@@ -34,9 +34,11 @@ pub async fn entry_point(
     let configs = validate_configs();
     let use_redis_default = "false".to_string();
     let use_redis = *configs.get(CONFIG_KEY_SERVER_REDIS_ENABLE).unwrap_or(&use_redis_default) == "true".to_string();
-
     let public_svc_address = format!("{}:{}", root_host, public_port);
     let client_svc_address = format!("{}:{}", root_host, client_port);
+
+    // config handler
+    let config_handler = Arc::new(ConfigHandlerImpl {});
 
     if use_redis {
         // store data in redis
@@ -60,7 +62,8 @@ pub async fn entry_point(
             cache_repo,
             client_repo,
             request_repo,
-            response_repo
+            response_repo,
+            config_handler
         ).await;
     } else {
         // store data in trabas process
@@ -78,7 +81,8 @@ pub async fn entry_point(
             cache_repo,
             client_repo,
             request_repo,
-            response_repo
+            response_repo,
+            config_handler
         ).await;
     }
 }
@@ -92,12 +96,13 @@ pub async fn run(
     cache_repo: Arc<dyn CacheRepo + Send + Sync>,
     client_repo: Arc<dyn ClientRepo + Send + Sync>,
     request_repo: Arc<dyn RequestRepo + Send + Sync>,
-    response_repo: Arc<dyn ResponseRepo + Send + Sync>
+    response_repo: Arc<dyn ResponseRepo + Send + Sync>,
+    config_handler: Arc<dyn ConfigHandler + Send + Sync>,
 ) {
     // init instances
     let public_listener = TcpListener::bind(public_svc_address).await.unwrap();
     let client_listener = TcpListener::bind(client_svc_address).await.unwrap();
-    let cache_service = CacheService::new(cache_repo);
+    let cache_service = get_cache_service(cache_repo, config_handler);
     let client_service = ClientService::new(client_repo);
     let public_service = PublicService::new(request_repo, response_repo, client_request_limit);
 

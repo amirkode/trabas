@@ -1,12 +1,18 @@
 use std::{collections::HashMap, sync::Arc};
 
 use common::{
-    config::{get_configs, set_configs}, data::dto::cache_config::CacheConfig, security::generate_hmac_key
+    config::{get_configs_from_proc_env, set_configs, ConfigHandler, ConfigHandlerImpl}, 
+    data::dto::cache_config::CacheConfig, 
+    security::generate_hmac_key
 };
 
-use crate::{data::{repository::cache_repo::CacheRepoRedisImpl, store::redis::RedisDataStore}, service::cache_service::CacheService};
+use crate::{
+    data::repository::cache_repo::{CacheRepo, CacheRepoProcMemImpl}, 
+    service::cache_service::CacheService
+};
 
 pub const CONFIG_KEY_SERVER_SECRET: &str = "SV_SECRET";
+pub const CONFIG_KEY_SERVER_CACHE_CONFIGS: &str = "SV_CACHE_CONFIGS";
 pub const CONFIG_KEY_SERVER_REDIS_ENABLE: &str = "SV_REDIS_ENABLE";
 pub const CONFIG_KEY_SERVER_REDIS_HOST: &str = "SV_REDIS_HOST";
 pub const CONFIG_KEY_SERVER_REDIS_PORT: &str = "SV_REDIS_PORT";
@@ -14,7 +20,7 @@ pub const CONFIG_KEY_SERVER_REDIS_PASS: &str = "SV_REDIS_PASS";
 
 // simple validation for config keys
 pub fn validate_configs() -> HashMap<String, String> {
-    let config = get_configs();
+    let config = get_configs_from_proc_env();
     let use_redis_default = "false".to_string();
     let use_redis = *config.get(CONFIG_KEY_SERVER_REDIS_ENABLE).unwrap_or(&use_redis_default) == "true".to_string();
     let mut required_keys = [
@@ -43,7 +49,7 @@ pub fn validate_configs() -> HashMap<String, String> {
 
 pub fn generate_server_secret(force: bool) -> () {
     // check whether the secret is already set
-    let config = get_configs();
+    let config = get_configs_from_proc_env();
     if config.contains_key(CONFIG_KEY_SERVER_SECRET) && !force {
         println!("Server Secret is already generated, please check it in the config file. Consider using --force option to force regenerating");
         return;
@@ -66,7 +72,7 @@ pub fn set_server_configs(
     redis_port: Option<String>, 
     redis_pass: Option<String>, 
     force: bool) -> () {
-    let config = get_configs();
+    let config = get_configs_from_proc_env();
     let mut config_to_set = HashMap::new();
 
     if let Some(e) = redis_enable {
@@ -121,27 +127,37 @@ pub fn set_server_configs(
 }
 
 // Cache Configs
-async fn get_cache_service() -> CacheService {
-    validate_configs();
-
-    let redis_store = RedisDataStore::new().unwrap();
-    let redis_connection = redis_store.client.get_multiplexed_async_connection().await.unwrap();
-    let cache_repo = Arc::new(CacheRepoRedisImpl::new(redis_connection.clone()));
-    let cache_service = CacheService::new(cache_repo);
+pub fn get_cache_service(
+        cache_repo: Arc<dyn CacheRepo + Send + Sync>, 
+        config_handler: Arc<dyn ConfigHandler + Send + Sync>) -> CacheService {
+    let cache_service = CacheService::new(
+        cache_repo, 
+        config_handler,
+        String::from(CONFIG_KEY_SERVER_CACHE_CONFIGS)
+    );
 
     cache_service
 }
 
-pub async fn set_cache_config(client_id: String, method: String, path: String, exp_duration: u32) {
-    let cache_service = get_cache_service().await;
+fn get_cache_service_for_settings() -> CacheService {
+    validate_configs();
+    // use in process memo repo since we don't really need this
+    // TODO: might consider separate cache & cache config in different services
+    let cache_repo = Arc::new(CacheRepoProcMemImpl::new());
+    let config_handler = Arc::new(ConfigHandlerImpl{});
+    
+    get_cache_service(cache_repo, config_handler)
+}
 
+pub async fn set_cache_config(client_id: String, method: String, path: String, exp_duration: u32) {
+    let cache_service = get_cache_service_for_settings();
     cache_service.set_cache_config(CacheConfig::new(client_id.clone(), method.clone(), path.clone(), exp_duration)).await.unwrap();
 
     println!("Cache config has been set (Client ID: {}, Method: {}, Path: {}, Duration: {} seconds)", client_id, method, path, exp_duration);
 }
 
 pub async fn remove_cache_config(client_id: String, method: String, path: String) {
-    let cache_service = get_cache_service().await;
+    let cache_service = get_cache_service_for_settings();
 
     cache_service.remove_cache_config(client_id.clone(), method.clone(), path.clone()).await.unwrap();
 
@@ -149,7 +165,7 @@ pub async fn remove_cache_config(client_id: String, method: String, path: String
 }
 
 pub async fn show_cache_config() {
-    let cache_service = get_cache_service().await;
+    let cache_service = get_cache_service_for_settings();
 
     cache_service.show_cache_config().await.unwrap();
 }

@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fs::{create_dir_all, File, OpenOptions};
@@ -24,7 +25,7 @@ fn get_env_path() -> String {
 
 // load all configs from .env file into map
 // using BTreeMap to get ordered keys
-pub fn get_configs() -> BTreeMap<String, String> {
+pub fn get_configs_from_dot_env() -> BTreeMap<String, String> {
     let env_path = get_env_path();
     let file = File::open(env_path);
     let mut map = BTreeMap::new();
@@ -50,6 +51,10 @@ pub fn get_configs() -> BTreeMap<String, String> {
     map
 }
 
+pub fn get_configs_from_proc_env() -> BTreeMap<String, String> {
+    env::vars().collect()
+}
+
 pub fn set_configs(values: HashMap<String, String>) {
     // make sure the path is exists
     let config_path_str = get_config_path();
@@ -59,7 +64,7 @@ pub fn set_configs(values: HashMap<String, String>) {
     }
     
     // fecth existing env vars
-    let mut config = get_configs();
+    let mut config = get_configs_from_dot_env();
     for (key, value) in values {
         config.insert(key, value);
     }
@@ -82,4 +87,24 @@ pub fn set_configs(values: HashMap<String, String>) {
 pub fn init_env_from_config() {
     let env_path = get_env_path();
     dotenv::from_filename(env_path).ok();
+}
+
+// this wraps base config functions
+#[async_trait]
+pub trait ConfigHandler {
+    async fn get_configs(&self) -> BTreeMap<String, String>;
+    async fn set_configs(&self, values: HashMap<String, String>);
+}
+
+pub struct ConfigHandlerImpl;
+
+#[async_trait]
+impl ConfigHandler for ConfigHandlerImpl {
+    async fn get_configs(&self) -> BTreeMap<String, String> {
+        get_configs_from_dot_env()
+    }
+
+    async fn set_configs(&self, values: HashMap<String, String>) {
+        set_configs(values);
+    }
 }

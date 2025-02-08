@@ -6,7 +6,7 @@ use rand::distributions::Alphanumeric;
 use mac_address::get_mac_address; 
 use tokio_native_tls::native_tls::Certificate;
 
-use common::config::{get_configs, get_config_path, set_configs};
+use common::config::{get_configs_from_proc_env, get_config_path, set_configs};
 
 pub const CONFIG_KEY_CLIENT_ID: &str = "CL_ID";
 pub const CONFIG_KEY_CLIENT_SERVER_HOST: &str = "CL_SERVER_HOST";
@@ -16,7 +16,7 @@ pub const CONFIG_CA_FILE_NAME: &str = "ca.crt";
 
 // simple validation for config keys
 pub fn validate_configs() {
-    let config = get_configs();
+    let config = get_configs_from_proc_env();
     let required_keys = [
         CONFIG_KEY_CLIENT_ID,
         CONFIG_KEY_CLIENT_SERVER_HOST,
@@ -31,7 +31,7 @@ pub fn validate_configs() {
 
 pub fn generate_client_id(custom_id: Option<String>, force: bool) -> () {
     // check whether the client is already set
-    let config = get_configs();
+    let config = get_configs_from_proc_env();
     if config.contains_key(CONFIG_KEY_CLIENT_ID) && !force {
         println!("Client ID is already generated, please check it in the config file. Consider using --force option to force regenerating");
         return;
@@ -86,7 +86,7 @@ fn generate_client_id_from_mac_address(length: usize) -> String {
 
 pub fn set_server_signing_key(value: String, force: bool) -> () {
     // check whether the signing key is already set
-    let config = get_configs();
+    let config = get_configs_from_proc_env();
     if config.contains_key(CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY) && !force {
         println!("Server Signing Key is already set, please check it in the config file. Consider using --force option to force resetting");
         return;
@@ -103,7 +103,7 @@ pub fn set_server_signing_key(value: String, force: bool) -> () {
 
 pub fn set_server_host(value: String, force: bool) -> () {
     // check whether the server host is already set
-    let config = get_configs();
+    let config = get_configs_from_proc_env();
     if config.contains_key(CONFIG_KEY_CLIENT_SERVER_HOST) && !force {
         println!("Server Host is already set, please check it in the config file. Consider using --force option to force resetting");
         return;
@@ -120,7 +120,7 @@ pub fn set_server_host(value: String, force: bool) -> () {
 
 pub fn set_server_port(value: u16, force: bool) -> () {
     // check whether the server host is already set
-    let config = get_configs();
+    let config = get_configs_from_proc_env();
     if config.contains_key(CONFIG_KEY_CLIENT_SERVER_PORT) && !force {
         println!("Server Port is already set, please check it in the config file. Consider using --force option to force resetting");
         return;

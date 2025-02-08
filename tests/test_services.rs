@@ -4,12 +4,16 @@ use common::data::dto::cache_config::CacheConfig;
 use env_logger::{Env, Builder, Target};
 use log::{error, info};
 use reqwest::{header::{HeaderMap, HeaderValue, COOKIE, SET_COOKIE}, Client, Response};
-use server::service::cache_service::CacheService;
+use server::{
+    service::cache_service::CacheService,
+    config::CONFIG_KEY_SERVER_CACHE_CONFIGS
+};
 use std::sync::Once;
 use tokio::{sync::Mutex, task::{self, JoinHandle}, time::sleep};
 use std::sync::Mutex as StdMutex;
 use trabas::mocks::{
     client::mock_underlying_repo::MockUnderlyingRepo, 
+    config::MockConfigHandlerImpl,
     server::{
         mock_cache_repo::MockCacheRepo, 
         mock_client_repo::MockClientRepo, 
@@ -74,10 +78,20 @@ async fn test_e2e_request_flow() {
     let client_repo = Arc::new(MockClientRepo::new());
     let request_repo = Arc::new(MockRequestRepo::new());
     let response_repo = Arc::new(MockResponseRepo::new());
+    let config_handler = Arc::new(MockConfigHandlerImpl::new());
     let public_svc_address = String::from("127.0.0.1:3333");
     let client_svc_address = String::from("127.0.0.1:3334");
     let server_exec = tokio::spawn(async move {
-        server::run(public_svc_address, client_svc_address, 0, false, cache_repo, client_repo, request_repo, response_repo).await;
+        server::run(
+            public_svc_address, 
+            client_svc_address, 
+            0, 
+            false, 
+            cache_repo, 
+            client_repo, 
+            request_repo, 
+            response_repo,
+            config_handler).await;
     });
 
     // delay for 2 seconds to wait the server to start up
@@ -155,10 +169,20 @@ async fn test_e2e_request_flow_with_request_limit() {
     let client_repo = Arc::new(MockClientRepo::new());
     let request_repo = Arc::new(MockRequestRepo::new());
     let response_repo = Arc::new(MockResponseRepo::new());
+    let config_handler = Arc::new(MockConfigHandlerImpl::new());
     let public_svc_address = String::from("127.0.0.1:3333");
     let client_svc_address = String::from("127.0.0.1:3334");
     let server_exec = tokio::spawn(async move {
-        server::run(public_svc_address, client_svc_address, request_limit, false, cache_repo, client_repo, request_repo, response_repo).await;
+        server::run(
+            public_svc_address, 
+            client_svc_address, 
+            request_limit, 
+            false, 
+            cache_repo, 
+            client_repo, 
+            request_repo, 
+            response_repo,
+            config_handler).await;
     });
 
     // delay for 2 seconds to wait the server to start up
@@ -230,11 +254,22 @@ async fn test_e2e_request_flow_with_cache() {
     let client_repo = Arc::new(MockClientRepo::new());
     let request_repo = Arc::new(MockRequestRepo::new());
     let response_repo = Arc::new(MockResponseRepo::new());
-    let cache_service = CacheService::new(cache_repo.clone());
+    let config_handler = Arc::new(MockConfigHandlerImpl::new());
+    let cache_service = CacheService::new(
+        cache_repo.clone(), config_handler.clone(), String::from(CONFIG_KEY_SERVER_CACHE_CONFIGS));
     let public_svc_address = String::from("127.0.0.1:3333");
     let client_svc_address = String::from("127.0.0.1:3334");
     let server_exec = tokio::spawn(async move {
-        server::run(public_svc_address, client_svc_address, 0, false, cache_repo, client_repo, request_repo, response_repo).await;
+        server::run(
+            public_svc_address, 
+            client_svc_address, 
+            0, 
+            false, 
+            cache_repo, 
+            client_repo, 
+            request_repo, 
+            response_repo, 
+            config_handler.clone()).await;
     });
 
     // delay for 2 seconds to wait the server to start up
@@ -327,12 +362,22 @@ async fn test_e2e_request_flow_with_client_id_cache_enabled() {
     let client_repo = Arc::new(MockClientRepo::new());
     let request_repo = Arc::new(MockRequestRepo::new());
     let response_repo = Arc::new(MockResponseRepo::new());
+    let config_handler = Arc::new(MockConfigHandlerImpl::new());
     let public_svc_address = String::from("127.0.0.1:3333");
     let client_svc_address = String::from("127.0.0.1:3334");
     let server_exec = tokio::spawn(async move {
         // enable the client id cache
         let cache_client_id = true;
-        server::run(public_svc_address, client_svc_address, 0, cache_client_id, cache_repo, client_repo, request_repo, response_repo).await;
+        server::run(
+            public_svc_address, 
+            client_svc_address, 
+            0, 
+            cache_client_id, 
+            cache_repo, 
+            client_repo, 
+            request_repo, 
+            response_repo,
+            config_handler).await;
     });
 
     // delay for 2 seconds to wait the server to start up

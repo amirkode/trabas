@@ -199,3 +199,25 @@ pub fn from_json_slice<T: DeserializeOwned>(slice: &[u8]) -> Option<T> {
         }
     }
 }
+
+// parse any type to json string
+pub fn to_json_string<T: Serialize>(value: &T) -> String {
+    match serde_json::to_string(value) {
+        Ok(json) => json,
+        Err(e) => {
+            eprintln!("Error serializing to JSON string: {}", e);
+            String::new()
+        }
+    }
+}
+
+// parse json string to actual type
+pub fn from_json_string<T: DeserializeOwned>(json_str: &str) -> Option<T> {
+    match serde_json::from_str::<T>(json_str) {
+        Ok(value) => Some(value),
+        Err(e) => {
+            eprintln!("Error deserializing from JSON string: {}", e);
+            None
+        }
+    }
+}

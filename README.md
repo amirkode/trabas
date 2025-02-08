@@ -6,7 +6,7 @@ Trabas is an (ngrok-like inspired) HTTP tunneling written in Rust utilizing stan
 ## Features
 - Basic HTTP Tunneling.
 - All utilities in one binary file.
-- A **Service Service** could handle multiple **Client Services**.
+- A **Server Service** could handle multiple **Client Services**.
 - Rate Limiter.
 - Request Cache.
 - Many more soon.

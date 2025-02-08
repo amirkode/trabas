@@ -3,7 +3,6 @@ use std::io::{Cursor, Read};
 
 use chrono::Utc;
 use common::convert::{parse_request_bytes, request_to_bytes, modify_headers_of_response_bytes};
-use common::data::dto::cache_config::CacheConfig;
 use common::net::{
     http_json_response_as_bytes,
     get_cookie_from_request,
@@ -128,25 +127,23 @@ async fn public_handler(
 
     info!("Public Request: [{}] [{}] {}", request_id.clone(), request_method.clone(), request_uri.clone());
 
-    let mut cache_config: Result<CacheConfig, String> = Err(String::from("default"));
-    if cache_service.is_enabled() {
-        cache_config = cache_service.get_cache_config(client_id.clone(), request_method.clone(), path.clone()).await;
-        match cache_config {
-            Ok(_) => {
-                match cache_service.get_cache(client_id.clone(), request_uri.clone(), request_method.clone(), request_body.clone()).await {
-                    Ok(cached_response) => {
-                        info!("Public Request: {} processed.", request_id);
-            
-                        // return the cached response to public client
-                        stream.write_all(&cached_response).await.unwrap();
-            
-                        return
-                    },
-                    Err(msg) => { error!("Error getting cache for request {}: {}", request_id.clone(), msg) } // ignore error
-                }
-            },
-            Err(_) => {}
-        }
+    // check cache
+    let cache_config = cache_service.get_cache_config(client_id.clone(), request_method.clone(), path.clone()).await;
+    match cache_config {
+        Ok(_) => {
+            match cache_service.get_cache(client_id.clone(), request_uri.clone(), request_method.clone(), request_body.clone()).await {
+                Ok(cached_response) => {
+                    info!("Public Request: {} processed [cache hit].", request_id);
+        
+                    // return the cached response to public client
+                    stream.write_all(&cached_response).await.unwrap();
+        
+                    return
+                },
+                Err(msg) => { error!("Error getting cache for request {}: {}", request_id.clone(), msg) } // ignore error
+            }
+        },
+        Err(_) => {}
     }
 
     let public_request = PublicRequest {
@@ -190,15 +187,14 @@ async fn public_handler(
         false => None
     });
 
-    if cache_service.is_enabled() {
-        match cache_config {
-            Ok(config) => {
-                if let Err(msg) = cache_service.set_cache(client_id, request_uri, request_method, request_body, res.clone(), config).await {
-                    error!("Error writing cache for request {}: {}", request_id.clone(), msg);
-                }
-            },
-            Err(_) => {}
-        }
+    // write cache
+    match cache_config {
+        Ok(config) => {
+            if let Err(msg) = cache_service.set_cache(client_id, request_uri, request_method, request_body, res.clone(), config).await {
+                error!("Error writing cache for request {}: {}", request_id.clone(), msg);
+            }
+        },
+        Err(_) => {}
     }
 
     info!("Public Request: {} processed.", request_id);

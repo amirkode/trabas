@@ -6,7 +6,7 @@ export REDIS_PORT=6379
 export REDIS_PASS=serverpass
 
 # init configs
-/install/bin/trabas server set-config --gen-key --redis-host $REDIS_HOST --redis-port $REDIS_PORT --redis-pass $REDIS_PASS
+/install/bin/trabas server set-config --gen-key --redis-enable true --redis-host $REDIS_HOST --redis-port $REDIS_PORT --redis-pass $REDIS_PASS
 
 # start redis
 redis-server --requirepass $REDIS_PASS --daemonize yes

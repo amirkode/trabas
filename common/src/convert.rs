@@ -62,7 +62,6 @@ pub fn request_to_bytes(request: &Request<Vec<u8>>) -> Vec<u8> {
     // lastly the body
     let body_bytes = request.body();
     bytes.extend_from_slice(&body_bytes);
-    
     bytes
 }
 
@@ -70,12 +69,15 @@ pub fn request_to_bytes(request: &Request<Vec<u8>>) -> Vec<u8> {
 // manipulate http response headers
 pub fn modify_headers_of_response_bytes(
     response_bytes: &[u8],
-    headers_to_remove: Vec<String>,
+    mut headers_to_remove: Vec<String>,
     cookies_to_set: HashMap<String, String>,
     update_content_length: bool,
 ) -> Vec<u8> {
     let mut headers = [httparse::EMPTY_HEADER; 64];
     let mut res = httparse::Response::new(&mut headers);
+
+    // always remove content length, since will be updated in the end
+    headers_to_remove.push(String::from("Content-Length"));
 
     // parse the response from bytes
     match res.parse(response_bytes) {

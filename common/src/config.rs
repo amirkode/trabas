@@ -5,6 +5,8 @@ use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 
+// TODO: find proper approach to test these
+
 // all config values in this tools will be written locally in this file
 const CONFIG_PATH: &str = "trabas_config";
 const CONFIG_ENV: &str = ".env";

@@ -16,7 +16,7 @@ This tool consists of two services:
 - Server Service
   - Listens for public requests and client service.
   - Forwards public request to clent service.
-  - Utilizes Redis for request queue.
+  - Utilizes Redis (Optional) for request queue.
 - Client Service
     - Forwards request received from server service to the underlying service.
 
@@ -56,7 +56,7 @@ this starts the public request and client service listeners.
 
 Once the server and client are connected, by default, the user can access your underlying service on `serverhost:8001/[client id]` (you might proxify the server to hide the actual port). But, you also directly access it on `serverhost:8001` with `trabas_client_id` cookie header sent by the client and you need to enable this feature by an additional `--cache-client-id` flag on server service.
 
-**Deployment**
+## Deployment
 
 For remote server deployment, minimal config as mentioned earlier is adequate for testing purpose. But, you may secure the data exchange between client service and server service through TLS connection. The well-rounded example can be found [here](https://github.com/amirkode/trabas/blob/main/doc/SETUP_SERVER.md).
 
@@ -67,7 +67,8 @@ Soon
 Soon
 
 ## Contribution
-Coming soon
+
+We welcome contributions to Trabas! If you'd like to contribute, please submit a pull request with your changes. If you find any issues, please report them in the issue tracker.
 
 
 ## License

@@ -4,23 +4,8 @@ This guide will cover remote server setup especially with **TLS** for client-ser
 ### Proxy
 Trabas utilizes standard TCP Connection for data sharing. It has its own data format (not tied to a particular protocol, i.e: HTTP) for client-server data sharing. If you use a reverse proxy, ensure it forwards the data packet **without protocol specific validation**. You may use NGINX with stream enabled or other tools that offer such feature.
 
-### Run Server Service with Docker
-We provide Dockerfile for server service deployment using Docker. You can find it in this directory of the project `docker/server`.
-
-Please copy **Dockerfile** and **entrypoint.sh** somewhere in your server. Then, build the docker image:
-```console
-foo@bar:~$ docker build -t [image tag] .
-```
-In the predefined Docker config, the public port and client port respectively will be `8787` and `8789` in the docker container. You can run it with this command:
-```console
-foo@bar:~$ docker run -d -p [exposed public port]:8787 -p [exposed client port]:8789 [image tag] --name [container name]
-```
-If it's successful, the log will show:
-```console
-[Public Listerner] Listening on :0.0.0.0:8787
-[Client Listerner] Listening on :0.0.0.0:8789
-```
 ### Setting up TLS
+
 To establish connection via TLS, we need a reverse proxy since the server service has not supported the TLS yet. In this example, we will use NGINX as our reversed proxy.
 
 **Generate CA and Server Certification**
@@ -69,27 +54,42 @@ _Verify the generated certificates_
 foo@bar:~$ openssl verify -CAfile ca.crt server.crt
 ```
 
-**Setting up NGINX proxy**
+### Run Server Service with Docker
 
-We provide `docker compose`configs for the NGINX. You can find it in this directory of the project `docker/server/serve_tls_with_nginx`.
+We provide Dockerfiles and docker-compose files for server service deployment using Docker. You can find them in the `docker/server` directory of the project.
 
-The steps are as follows:
+**Setting up Nginx Configuration**
 
-- Copy all files inside the folder to somewhere in your server.
-- Copy the generated `server.crt` and `server.key` to the `ssl` folder.
-- Configure the `nginx.conf`.
-- Lastly run the container:
-    ```console
-    foo@bar:~$ docker compose up -d
-    ```
-- The NGINX will listen to port `3377` (you may change as you wish in the `docker-compose.yml`).
+We provide configuration templates in `docker/server/nginx_config`.
+To configure Nginx as a reverse proxy, follow these steps:
 
-### Run everything with Docker Compose
-Above operations might take time. We also provide a `Docker Compose` file to run both trabas service and NGINX altogether. You could find in this directory: `docker/server/docker-compose.yml`. CD to the directory and just run:
+1.  Copy the generated `server.crt` and `server.key` to the `ssl`.
+2.  Configure the `nginx.conf` such host, and ports.
+3.  Ensure NGINX is configured to listen on port `3377` (or any port you prefer) for incoming connections.
+
+The NGINX will listen to port `3377` (you may change as you wish in the `docker-compose.yml`).
+
+**Run everything**
+
+To run the server with Redis:
+
+1.  Navigate to the `docker/server/with_redis` directory.
+2.  Run `docker compose up`.
+
+To run the server without Redis:
+
+1.  Navigate to the `docker/server/without_redis` directory.
+2.  Run `docker compose up`.
+
+The public port and client port for both services are `8787` and `8789` respectively. The container name for the trabas server is `trabas_server`, and the nginx container name is `trabas_nginx` for both with and without Redis.
+
+If the server starts successfully, the log will show:
+
 ```console
-foo@bar:~$ docker compose up -d
+[Public Listerner] Listening on :0.0.0.0:8787
+[Client Listerner] Listening on :0.0.0.0:8789
 ```
-Ensure you have everything set (e.g. nginx.conf, ssl, etc.).
+
 ## Client Setup
 ### Setting up Client Service
 

@@ -21,4 +21,4 @@ jobs:
     - name: Run e2e tests
       run: cargo test --verbose -- --test-threads=1 --nocapture
     - name: Run "common" package tests
-      run: cargo test --package common --verbose
+      run: cargo test --package common --verbose -- --test-threads=1 --nocapture

@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trabas_server
+    ports:
+      - "127.0.0.1:8787:8787"
+      # this should not be needed, since it's behind the NGINX
+      # - "127.0.0.1:8789:8789"
+    networks:
+      - trabas_network
+    # uncomment if you have your own .env set
+    # volumes:
+    #   - ./.env:/install/bin/trabas_config/.env
+
+  nginx:
+    image: nginx:alpine
+    container_name: trabas_nginx
+    ports:
+      - "3377:3377"
+    volumes:
+      - ../nginx_config/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../nginx_config/ssl:/etc/nginx/ssl:ro
+    restart: always
+    networks:
+      - trabas_network
+    depends_on:
+      - app
+
+networks:
+  trabas_network:
+    driver: bridge

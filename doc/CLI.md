@@ -49,7 +49,7 @@ Option | Type | Description |
 `--force` | No value [Optional] | Force rewrite all configs that has been set |
 #### Example
 ```console
-foo@bar:~$ trabas server set-config --get-key --redis-host localhost --redis-port 6379 --redis-pass mypass --force
+foo@bar:~$ trabas server set-config --gen-key --redis-host localhost --redis-port 6379 --redis-pass mypass --force
 ```
 #### `trabas server cache-config set`
 Setting cache configuration for specific requests.
@@ -65,6 +65,20 @@ Option | Type | Description |
 #### Example
 ```console
 foo@bar:~$ trabas server cache-config set --client-id client1 --method GET --path /ping --exp-duration 60
+```
+#### `trabas server cache-config remove`
+Remove cache configuration for specific requests.
+
+NOTE: This is only available when Redis is enabled.
+#### Options
+Option | Type | Description |
+--- | --- | --- |
+`--client-id` | String | Client ID
+`--method` | String | Request method |
+`--path` | String | Request path |
+#### Example
+```console
+foo@bar:~$ trabas server cache-config remove --client-id client1 --method GET --path /ping
 ```
 #### `trabas server cache-config list`
 Show all cache configurations for specific requests.
@@ -86,14 +100,14 @@ Option | Type | Description |
 foo@bar:~$ trabas client serve --host localhost --port 8001 --tls
 ```
 #### `trabas client set-config`
-Set clinet service configuration.
+Set client service configuration.
 #### Options
 Option | Type | Description |
 --- | --- | --- |
 `--client-id` | No value/String [Optional] | Specify Client ID or Generate it if no value is passed |
 `--server-host` | String [Optional] | Server service host |
 `--server-port` | Integer | Server service port |
-`--server-signing-key` | Integer | Server secret for server authentication |
+`--server-signing-key` | String | Server secret for server authentication |
 `--force` | No value [Optional] | Force rewrite all configs that has been set |
 #### Example
 ```console

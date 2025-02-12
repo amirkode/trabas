@@ -6,7 +6,8 @@ use trabas::{PROJECT_NAME, PROJECT_VERSION};
 // TODO: complete help info
 #[derive(Parser)]
 #[command(name = "trabas")]
-#[command(about = "A light-weight http tunneling tool")]
+#[command(version = PROJECT_VERSION, about = "A light-weight http tunneling tool")]
+#[command(long_about = "A light-weight http tunneling tool that creates secure tunnels to expose your local services to the internet.")]
 struct Cli {
     #[command(subcommand)]
     command: Commands
@@ -89,7 +90,6 @@ enum ClientActions {
     }
 }
 
-// TODO: add monitoring commands
 #[derive(Subcommand)]
 enum ServerActions {
     Run {
@@ -235,15 +235,24 @@ async fn main() {
             ClientActions::SetConfig { client_id, server_host, server_port, server_signing_key, force } => {
                 if client_id.is_none() && server_host.is_none() && server_port.is_none() && server_signing_key.is_none() {
                     let mut cmd = Cli::command();
+                    let mut error_message = "At least one of the following arguments must be provided:".to_string();
+
+                    if client_id.is_none() {
+                        error_message.push_str(format!(" --{}", CONFIG_ARG_CL_ID).as_str());
+                    }
+                    if server_host.is_none() {
+                        error_message.push_str(format!(" --{}", CONFIG_ARG_CL_SERVER_HOST).as_str());
+                    }
+                    if server_port.is_none() {
+                        error_message.push_str(format!(" --{}", CONFIG_ARG_CL_SERVER_PORT).as_str());
+                    }
+                    if server_signing_key.is_none() {
+                        error_message.push_str(format!(" --{}", CONFIG_ARG_CL_SERVER_SIGNING_KEY).as_str());
+                    }
+
                     cmd.error(
                         ErrorKind::MissingRequiredArgument,
-                        format!(
-                            "At least one of --{}, --{}, --{}, or --{} must be provided",
-                            CONFIG_ARG_CL_ID,
-                            CONFIG_ARG_CL_SERVER_HOST,
-                            CONFIG_ARG_CL_SERVER_PORT,
-                            CONFIG_ARG_CL_SERVER_SIGNING_KEY
-                        )
+                        error_message
                     ).exit();
                 }
 
@@ -290,17 +299,30 @@ async fn main() {
             ServerActions::SetConfig { gen_key, key, redis_enable, redis_host, redis_port, redis_pass, force } => {
                 if gen_key.is_none() && key.is_none() && redis_enable.is_none() && redis_host.is_none() && redis_port.is_none() && redis_pass.is_none() {
                     let mut cmd = Cli::command();
+                    let mut error_message = "At least one of the following arguments must be provided:".to_string();
+
+                    if gen_key.is_none() {
+                        error_message.push_str(format!(" --{}", CONFIG_ARG_SV_GEN_KEY).as_str());
+                    }
+                    if key.is_none() {
+                        error_message.push_str(format!(" --{}", CONFIG_ARG_SV_KEY).as_str());
+                    }
+                    if redis_enable.is_none() {
+                        error_message.push_str(format!(" --{}", CONFIG_ARG_SV_REDIS_ENABLE).as_str());
+                    }
+                    if redis_host.is_none() {
+                        error_message.push_str(format!(" --{}", CONFIG_ARG_SV_REDIS_HOST).as_str());
+                    }
+                    if redis_port.is_none() {
+                        error_message.push_str(format!(" --{}", CONFIG_ARG_SV_REDIS_PORT).as_str());
+                    }
+                    if redis_pass.is_none() {
+                        error_message.push_str(format!(" --{}", CONFIG_ARG_SV_REDIS_PASS).as_str());
+                    }
+
                     cmd.error(
                         ErrorKind::MissingRequiredArgument,
-                        format!(
-                            "At least one of --{}, --{}, --{}, --{}, --{}, or --{} must be provided.",
-                            CONFIG_ARG_SV_GEN_KEY,
-                            CONFIG_ARG_SV_KEY,
-                            CONFIG_ARG_SV_REDIS_ENABLE,
-                            CONFIG_ARG_SV_REDIS_HOST,
-                            CONFIG_ARG_SV_REDIS_PORT,
-                            CONFIG_ARG_SV_REDIS_PASS
-                        )
+                        error_message
                     ).exit();
                 }
 

@@ -10,29 +10,28 @@ To establish connection via TLS, we need a reverse proxy since the server servic
 
 **Generate CA and Server Certification**
 
-You may generate these certificates using trusted issuers e.g: `Let's Encrypt, DigiCert, etc`. But, you can follow these steps for self-signed certificates using `openssl`.
+You may generate these certificates using trusted issuers e.g: `Let's Encrypt, DigiCert, etc`. But, you can follow these steps for self-signed certificates using `openssl`. In this case, we try to generate certificates for `localhost` (You should change some details for a real server deployment).
 
 _Generate CA Certificate_
 
 Create a private key:
 ```console
-foo@bar:~$ openssl genrsa -out ca.key 2048
+foo@bar:~$ openssl genpkey -algorithm RSA -out ca.key -pkeyopt rsa_keygen_bits:2048
 ```
 Create a self-signed certificate:
 ```console
 foo@bar:~$ openssl req -x509 -new -nodes -key ca.key -sha256 -days 3650 -out ca.crt -subj "/C=US/ST=State/L=City/O=Organization/OU=OrgUnit/CN=Example CA"
-
 ```
 
 _Generate Server Certificate signed by the CA_
 
 Create a private key for CA:
 ```console
-foo@bar:~$ openssl genrsa -out server.key 2048
+foo@bar:~$ openssl genpkey -algorithm RSA -out server.key -pkeyopt rsa_keygen_bits:2048
 ```
 Create a certificate signing request (CSR):
 ```console
-foo@bar:~$ openssl req -new -key server.key -out server.csr -subj "/C=US/ST=State/L=City/O=Organization/OU=OrgUnit/CN=myhost.com"
+foo@bar:~$ openssl req -new -key server.key -out server.csr -subj "/C=US/ST=State/L=City/O=Organization/OU=OrgUnit/CN=localhost"
 ```
 Prepare a configuration file (server.conf) for the certificate:
 ```conf
@@ -42,7 +41,8 @@ extendedKeyUsage = serverAuth
 subjectAltName = @alt_names
 
 [ alt_names ]
-DNS.1 = myhost.com
+DNS.1 = localhost
+IP.1 = 127.0.0.1
 ```
 Sign the server certificate with the CA certificate:
 ```console

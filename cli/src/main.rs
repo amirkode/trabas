@@ -243,7 +243,9 @@ fn cleanup_logger_state() {
     }
 }
 
-fn setup_exit_handler() {
+fn setup_exit_handler(debug: bool) {
+    if debug { return; }
+
     ctrlc::set_handler(move || {
         // on Ctrl+C, lock the logger and perform cleanup
         cleanup_logger_state();
@@ -311,8 +313,7 @@ fn create_logo() -> Vec<String> {
     vec!["Welcome to:".to_string(), "".to_string(), line1, line2, line3, line4, line5, "".to_string()]
 }
 
-fn init_logger() {
-    let debug = std::env::var(CONFIG_KEY_GLOBAL_DEBUG).unwrap_or_default() == "true";
+fn init_logger(debug: bool) {
     if !debug {
         log::set_logger(&*LOGGER).unwrap();
         log::set_max_level(LevelFilter::Info);
@@ -333,14 +334,16 @@ fn init_logger() {
 
 #[tokio::main]
 async fn main() {
-    // exit handler
-    setup_exit_handler();
-
     // init env vars
     init_env_from_config();
+    
+    let debug = std::env::var(CONFIG_KEY_GLOBAL_DEBUG).unwrap_or_default() == "true";
+
+    // exit handler
+    setup_exit_handler(debug);
 
     // init logger
-    init_logger();
+    init_logger(debug);
 
     // route commands
     let cli = Cli::parse();

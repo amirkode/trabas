@@ -42,14 +42,13 @@ impl ClientRepo for ClientRepoRedisImpl {
     }
 
     async fn get_id_by_alias(&self, alias_id: String) -> Result<String, String> {
-        let data: Vec<u8> = self.connection.clone().hget(REDIS_KEY_CLIENT_ALIAS_MAP, alias_id.clone()).await
+        let data: String = self.connection.clone().hget(REDIS_KEY_CLIENT_ALIAS_MAP, alias_id.clone()).await
             .map_err(|e| format!("Error getting client ID by alias {}: {}", alias_id, e))?;
         if data.len() == 0 {
             return Err(String::from("Error getting client ID by alias: no valid client exists"));
         }
 
-        let res: String = from_json_slice(&data).unwrap();
-        Ok(res)
+        Ok(data)
     }
 
     async fn create(&self, client: TunnelClient) -> Result<(), String> {

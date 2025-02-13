@@ -150,7 +150,7 @@ mod tests {
             let mut stream = net::TcpStreamTLS::from_tcp(read, write);
             let mut reader = net::HttpReader::from_tcp_stream(&mut stream);
             let mut res = Vec::new();
-            reader.read(&mut res).await.unwrap();
+            reader.read(&mut res, false).await.unwrap();
         });
 
         let stream = TcpStream::connect(addr).await.unwrap();

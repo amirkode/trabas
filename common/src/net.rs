@@ -199,6 +199,7 @@ pub async fn read_bytes_from_mutexed_socket_for_internal(stream: Arc<Mutex<TcpSt
     Ok(())
 }
 
+#[deprecated(since = "Tunnel registration refactor", note = "Use `read_bytes_from_socket_for_internal` function instead.")]
 pub async fn read_string_from_socket_for_internal(stream: &mut TcpStreamTLS, res: &mut String) -> Result<(), String> {
     let mut temp = Vec::new();
     read_bytes_from_socket_for_internal(stream, &mut temp).await?;
@@ -408,7 +409,12 @@ impl<'a> HttpReader<'a> {
         HttpReader { tcp_read: stream, break_limit: 100 }
     }
 
-    pub async fn read(&mut self, res: &mut Vec<u8>) -> Result<(), String> {
+    /// Params:
+    /// - `res`: A mutable reference to a `Vec<u8>` where the read data will be stored.
+    /// - `immediate_close`: 
+    ///   A boolean flag indicating whether to close the stream immediately after reading the headers.
+    ///   Useful for reading a client request, as opposed to server response.
+    pub async fn read(&mut self, res: &mut Vec<u8>, immediate_close: bool) -> Result<(), String> {
         let mut break_cnt = 0;
         let mut buffer = [0; 1024];
         let mut prev_len = res.len();
@@ -417,6 +423,7 @@ impl<'a> HttpReader<'a> {
             let n = self.tcp_read.read(&mut buffer).await.map_err(|e| format!("Error reading socket: {}", e))?;
 
             res.extend_from_slice(&buffer[..n]);
+            // end of headers
             if res.windows(4).any(|w| w == b"\r\n\r\n") {
                 break;
             }
@@ -448,39 +455,47 @@ impl<'a> HttpReader<'a> {
             .lines()
             .find_map(|line| line.strip_prefix("Content-Length:").map(|len| len.trim().parse().ok()))
             .flatten();
-        let content_type: Option<String> = headers_text
-            .lines()
-            .find_map(|line| line.strip_prefix("Content-Type:").map(|len| len.trim().parse().ok()))
-            .flatten();
         let is_chunked = headers_text
             .lines()
             .any(|line| {
                 line.to_lowercase().starts_with("transfer-encoding:") && 
                 line.to_lowercase().contains("chunked")
             });
-        let connection: Option<String> = headers_text
-            .lines()
-            .find_map(|line| line.strip_prefix("Connection:").map(|len| len.trim().to_lowercase().to_string()));
+
+        // TODO: might be used later
+        // let content_type: Option<String> = headers_text
+        //     .lines()
+        //     .find_map(|line| line.strip_prefix("Content-Type:").map(|len| len.trim().parse().ok()))
+        //     .flatten();
+        // let connection: Option<String> = headers_text
+        //     .lines()
+        //     .find_map(|line| line.strip_prefix("Connection:").map(|len| len.trim().to_lowercase().to_string()));
 
         if is_chunked {
             self.read_by_chunk_size(res, headers_end).await?;
         } else if let Some(len) = content_length {
             self.read_by_content_len(res, headers_end, len).await?;
-        } else {
-            let mut read_until_closed = connection.unwrap_or(String::from("")) == "close";
-            if !read_until_closed {
-                let content_type = content_type.unwrap_or(String::from(""));
-                // TODO: implement content type specific handler
-                if content_type == "application/octet-stream" {
-                    // for example:
-                    // in this type, we just need to check until the connection is closed (read length: 0)
-                    read_until_closed = true;
-                }
-            }
+        } else if !immediate_close {
+            // this case only for reading HTTP response from requested server
 
-            if read_until_closed {
-                self.read_until_close(res).await?;
-            }
+            // TODO: For now, I don't think these codes necessary
+            // let connection_value = connection.unwrap_or(String::from(""));
+            // let mut read_until_closed = connection_value != "close";
+            // if !read_until_closed {
+            //     let content_type = content_type.unwrap_or(String::from(""));
+            //     // TODO: implement content type specific handler
+            //     if content_type == "application/octet-stream" {
+            //         // for example:
+            //         // in this type, we just need to check until the connection is closed (read length: 0)
+            //         read_until_closed = true;
+            //     }
+            // }
+
+            // if read_until_closed {
+            //     self.read_until_close(res).await?;
+            // }
+
+            self.read_until_close(res).await?;
         }
 
         Ok(())
@@ -686,4 +701,18 @@ pub fn get_cookie_from_request<T>(req: &Request<T>, cookie_name: &str) -> Option
     }
 
     jar.get(cookie_name).map(|cookie| cookie.value().to_string())
+}
+
+// append a path to a valid URL
+pub fn append_path_to_url(base_url: &str, suffix_path: &str) -> String {
+    let mut result = String::from(base_url);
+
+    if !result.ends_with('/') && !suffix_path.starts_with('/') {
+        result.push('/');
+    } else if result.ends_with('/') && suffix_path.starts_with('/') {
+        result.pop();
+    }
+
+    result.push_str(suffix_path);
+    result
 }

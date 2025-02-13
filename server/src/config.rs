@@ -17,6 +17,7 @@ pub const CONFIG_KEY_SERVER_REDIS_ENABLE: &str = "SV_REDIS_ENABLE";
 pub const CONFIG_KEY_SERVER_REDIS_HOST: &str = "SV_REDIS_HOST";
 pub const CONFIG_KEY_SERVER_REDIS_PORT: &str = "SV_REDIS_PORT";
 pub const CONFIG_KEY_SERVER_REDIS_PASS: &str = "SV_REDIS_PASS";
+pub const CONFIG_KEY_SERVER_PUBLIC_ENDPOINT: &str = "SV_PUBLIC_ENDPOINT";
 
 // simple validation for config keys
 pub fn validate_configs() -> HashMap<String, String> {
@@ -66,11 +67,12 @@ pub fn generate_server_secret(force: bool) -> () {
 }
 
 pub fn set_server_configs(
-    key: Option<String>, 
-    redis_enable: Option<String>, 
-    redis_host: Option<String>, 
-    redis_port: Option<String>, 
-    redis_pass: Option<String>, 
+    key: Option<String>,
+    redis_enable: Option<String>,
+    redis_host: Option<String>,
+    redis_port: Option<String>,
+    redis_pass: Option<String>,
+    public_endpoint: Option<String>,
     force: bool) -> () {
     let config = get_configs_from_proc_env();
     let mut config_to_set = HashMap::new();
@@ -118,6 +120,15 @@ pub fn set_server_configs(
         }
 
         config_to_set.insert(String::from(CONFIG_KEY_SERVER_REDIS_PASS), ps);
+    }
+
+    if let Some(pe) = public_endpoint {
+        if config.contains_key(CONFIG_KEY_SERVER_PUBLIC_ENDPOINT) && !force {
+            println!("Public Endpoint is already set, please check it in the config file. Consider using --force option to force resetting");
+            return;
+        }
+
+        config_to_set.insert(String::from(CONFIG_KEY_SERVER_PUBLIC_ENDPOINT), pe);
     }
 
     set_configs(config_to_set);

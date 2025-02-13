@@ -48,7 +48,7 @@ async fn public_handler(
 ) -> () {
     // read data as bytes
     let mut raw_request = Vec::new();
-    if let Err(e) = HttpReader::from_tcp_stream(&mut stream).read(&mut raw_request).await {
+    if let Err(e) = HttpReader::from_tcp_stream(&mut stream).read(&mut raw_request, true).await {
         error!("Error reading incoming request: {}", e);
         return;
     }
@@ -95,20 +95,22 @@ async fn public_handler(
     };
 
     // chek whether client is active
-    if !client_service.check_client_validity(client_id.clone()).await {
-        let msg = "Client invalid or inactive";
-        let response = match http_json_response_as_bytes(
-        HttpResponse::new(false, String::from(msg)), StatusCode::from_u16(400).unwrap()) {
-            Ok(value) => value,
-            Err(_) => {
-                return;
-            } 
-        };
+    let client_id = match client_service.check_client_validity(client_id).await {
+        Ok(value) => value,
+        Err(msg) => {
+            let response = match http_json_response_as_bytes(
+            HttpResponse::new(false, msg.clone()), StatusCode::from_u16(400).unwrap()) {
+                Ok(value) => value,
+                Err(_) => {
+                    return;
+                } 
+            };
 
-        error!("{}", msg);
-        stream.write_all(&response).await.unwrap();
-        return;
-    }
+            error!("{}", msg);
+            stream.write_all(&response).await.unwrap();
+            return;
+        }
+    };
 
     raw_request = request_to_bytes(&request);
 
@@ -125,7 +127,7 @@ async fn public_handler(
     let request_method = String::from(request.method().as_str());
     let request_body = get_unique_body_as_bytes(request.clone());
 
-    info!("Public Request: [{}] [{}] {}", request_id.clone(), request_method.clone(), request_uri.clone());
+    info!("Public Request: [{}] [client: {}] [{}] {}", request_id.clone(), client_id.clone(), request_method.clone(), request_uri.clone());
 
     // check cache
     let cache_config = cache_service.get_cache_config(client_id.clone(), request_method.clone(), path.clone()).await;
@@ -151,7 +153,7 @@ async fn public_handler(
         data: raw_request
     };
 
-    // enqueue the request to redis
+    // enqueue the request
     if let Err(e) = public_service.enqueue_request(client_id.clone(), public_request).await {
         let response = match http_json_response_as_bytes(
         HttpResponse::new(false, e), StatusCode::from_u16(503).unwrap()) {

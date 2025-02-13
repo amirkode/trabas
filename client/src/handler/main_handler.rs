@@ -4,15 +4,15 @@ use http::StatusCode;
 
 use common::{
     convert::{from_json_slice, to_json_vec}, 
-    data::dto::{public_request::PublicRequest, public_response::PublicResponse, tunnel_client::TunnelClient}, 
+    data::dto::{public_request::PublicRequest, public_response::PublicResponse, tunnel_ack::TunnelAck, tunnel_client::TunnelClient}, 
     net::{
-        http_json_response_as_bytes,
-        prepare_packet,
-        read_bytes_from_mutexed_socket_for_internal,
-        read_string_from_socket_for_internal,
-        separate_packets,
-        HttpResponse,
-        TcpStreamTLS,
+        http_json_response_as_bytes, 
+        prepare_packet, 
+        read_bytes_from_mutexed_socket_for_internal, 
+        read_bytes_from_socket_for_internal, 
+        separate_packets, 
+        HttpResponse, 
+        TcpStreamTLS, 
         HEALTH_CHECK_PACKET_ACK
     }, 
     security::sign_value
@@ -73,17 +73,38 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         }
 
         // check if the server handshake was successful
-        let mut ok: String = Default::default();
-        if let Err(e) = read_string_from_socket_for_internal(&mut read_stream, &mut ok).await {
+        let mut server_response = Vec::new();
+        if let Err(e) = read_bytes_from_socket_for_internal(&mut read_stream, &mut server_response).await {
             error!("Error connecting to server service: {}", e);
             continue;
         }
-        if ok != "ok" {
-            error!("Error connecting to server service: {}", ok);
+
+        let packets = separate_packets(server_response);
+        let server_response = match packets.get(0) {
+            Some(data) => data,
+            None => {
+                error!("Error connecting to server service: Empty data returned by server");
+                return;
+            }
+        };
+        let ack: TunnelAck = match from_json_slice(&server_response) {
+            Some(value) => value,
+            None => {
+                error!("Error connecting to server service: Invalid response");
+                return;    
+            }
+        };
+
+        if !ack.success {
+            error!("Error connecting to server service: {}", ack.message);
             continue;
         }
 
         info!("Connected to server service.");
+        info!("Available Public Endpoints:");
+        for endpoint in ack.public_endpoints {
+            info!("* {}", endpoint);
+        }
         
         // create channel for request queue
         let (tx, rx) = mpsc::channel::<PublicResponse>(5);

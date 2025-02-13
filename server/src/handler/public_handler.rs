@@ -115,7 +115,7 @@ async fn public_handler(
 
     raw_request = request_to_bytes(&request);
 
-    let request_id = genereate_request_id(client_id.clone());
+    let request_id = generate_request_id(client_id.clone());
 
     // check whether a cache of the request is available
     // TODO: Uniqueness up to header values (i.e: cookies) might make the cache ineffective
@@ -318,7 +318,7 @@ fn get_client_id<T>(mut request: Request<T>, cache_client_id: bool) -> Result<(R
     Ok((request, client_id, new_path))
 }
 
-fn genereate_request_id(client_id: String) -> String {
+fn generate_request_id(client_id: String) -> String {
     // combine client_id and timestamp epoch
     let timestamp = Utc::now().timestamp_nanos_opt().unwrap_or(0);
     // add randomness

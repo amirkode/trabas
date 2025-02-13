@@ -18,6 +18,13 @@ foo@bar:~$ trabas [COMMAND] [SUBCOMMANDS if any] --help
 ```
 
 ## Commands
+### `trabas global-config`
+Manage global configuration.
+
+Option | Type | Description |
+--- | --- | --- |
+`--set-debug` | None | Set environment as debug |
+`--unset-debug` | None | Set environment as non debug |
 ### `trabas server`
 Manage server service.
 ### Sub commands

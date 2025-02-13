@@ -1,12 +1,8 @@
 
 use common::convert::{from_json_slice, to_json_vec};
+use common::data::dto::tunnel_ack::TunnelAck;
 use common::net::{
-    read_bytes_from_mutexed_socket_for_internal, 
-    read_bytes_from_socket_for_internal,
-    prepare_packet,
-    separate_packets,
-    TcpStreamTLS,
-    HEALTH_CHECK_PACKET_ACK
+    append_path_to_url, prepare_packet, read_bytes_from_mutexed_socket_for_internal, read_bytes_from_socket_for_internal, separate_packets, TcpStreamTLS, HEALTH_CHECK_PACKET_ACK
 };
 use common::validate_signature;
 use log::{error, info};
@@ -46,29 +42,40 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     let client: TunnelClient = match from_json_slice(&raw_response) {
         Some(value) => value,
         None => {
-            let err_msg = format!("Invalid request");
-            let packet = prepare_packet(Vec::from(err_msg.as_bytes()));
-            error!("{}", err_msg);
+            let tunnel_ack = TunnelAck::new(false, format!("Invalid request"), vec![]);
+            let packet = prepare_packet(to_json_vec(&tunnel_ack));
             write_stream.write_all(&packet).await.unwrap();
+            error!("{}", tunnel_ack.message);
             return;    
         }
     };
     let client_id = client.id.clone();
     // validate connection before registering client
     if !validate_connection(client.signature.clone(), client.id.clone()) {
-        let err_msg = format!("Client Registration Denied. client_id: {}, signature: {}", client_id, client.signature);
-        let packet = prepare_packet(Vec::from(err_msg.as_bytes()));
-        error!("{}", err_msg);
+        let tunnel_ack = TunnelAck::new(
+            false, 
+            format!("Client Registration Denied. client_id: {}, signature: {}", client_id, client.signature), 
+            vec![]);
+        let packet = prepare_packet(to_json_vec(&tunnel_ack));
         write_stream.write_all(&packet).await.unwrap();
+        error!("{}", tunnel_ack.message);
         return;
-    } else {
-        // acknowledge the successful handshake
-        let ok = b"ok";
-        let packet = prepare_packet(Vec::from(ok));
-        let msg = format!("Client Registration Successful. client_id: {}, signature: {}", client_id, client.signature);
-        info!("{}", msg);
-        write_stream.write_all(&packet).await.unwrap();
     }
+
+    // acknowledge the successful handshake
+    // public endpoints are returned by the server because server should control the mechanism
+    // and might change it in the future
+    let endpoint_prefix = std::env::var(config::CONFIG_KEY_SERVER_PUBLIC_ENDPOINT).unwrap_or_default();
+    let public_endpoints = vec![append_path_to_url(&endpoint_prefix, &client.id), append_path_to_url(&endpoint_prefix, &client.alias_id)];
+    let tunnel_ack = TunnelAck::new(
+        true, 
+        format!("ok"), 
+        public_endpoints);
+    let packet = prepare_packet(to_json_vec(&tunnel_ack));
+    write_stream.write_all(&packet).await.unwrap();
+
+    let msg = format!("Client Registration Successful. client_id: {}, signature: {}", client_id, client.signature);
+    info!("{}", msg);
 
     // sleep for 1.5 seconds to prevent race condition with healthcheck packet
     sleep(Duration::from_millis(1500)).await;

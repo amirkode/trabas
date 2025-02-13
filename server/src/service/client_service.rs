@@ -26,12 +26,28 @@ impl ClientService {
         self.client_repo.set_dc(id.clone(), now).await
     }
 
-    pub async fn check_client_validity(&self, id: String) -> bool {
-        let rec = match self.client_repo.get(id).await {
-            Ok(value) => value,
-            Err(_) => return false
+    pub async fn check_client_validity(&self, id: String) -> Result<String, String> {
+        let rec: Option<TunnelClient> = match self.client_repo.get(id.clone()).await {
+            Ok(value) => Some(value),
+            Err(_) => {
+                // check again in alias map
+                let res: Option<TunnelClient> = match self.client_repo.get_id_by_alias(id).await {
+                    Ok(id) => match self.client_repo.get(id).await {
+                        Ok(value) => Some(value),
+                        Err(_) => None
+                    },
+                    Err(_) => None
+                };
+                res
+            }
         };
 
-        rec.conn_dc_at == None
+        if let Some(rec) = rec {
+            if rec.conn_dc_at == None {
+                return Ok(rec.id);
+            }
+        }
+
+        Err(String::from("Client invalid or inactive"))
     }
 }

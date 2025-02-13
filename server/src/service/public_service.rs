@@ -28,6 +28,7 @@ impl PublicService {
         // if the request limit is set, the queue len must be checked
         if self.request_limit > 0 {
             let queue_len = self.request_repo.queue_len(client_id.clone()).await?;
+            // TODO: instead of return right away, make it wait for a particular seconds (?)
             if queue_len > self.request_limit {
                 return Err(String::from("Max request limit has been reached"))
             }

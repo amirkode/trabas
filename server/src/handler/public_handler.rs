@@ -11,6 +11,7 @@ use common::net::{
     TcpStreamTLS
 };
 use hex;
+use rand::{self, Rng};
 use log::{error, info};
 use multipart::server::Multipart;
 use sha2::{Sha256, Digest};
@@ -48,7 +49,7 @@ async fn public_handler(
 ) -> () {
     // read data as bytes
     let mut raw_request = Vec::new();
-    if let Err(e) = HttpReader::from_tcp_stream(&mut stream).read(&mut raw_request).await {
+    if let Err(e) = HttpReader::from_tcp_stream(&mut stream).read(&mut raw_request, true).await {
         error!("Error reading incoming request: {}", e);
         return;
     }
@@ -95,24 +96,26 @@ async fn public_handler(
     };
 
     // chek whether client is active
-    if !client_service.check_client_validity(client_id.clone()).await {
-        let msg = "Client invalid or inactive";
-        let response = match http_json_response_as_bytes(
-        HttpResponse::new(false, String::from(msg)), StatusCode::from_u16(400).unwrap()) {
-            Ok(value) => value,
-            Err(_) => {
-                return;
-            } 
-        };
+    let client_id = match client_service.check_client_validity(client_id).await {
+        Ok(value) => value,
+        Err(msg) => {
+            let response = match http_json_response_as_bytes(
+            HttpResponse::new(false, msg.clone()), StatusCode::from_u16(400).unwrap()) {
+                Ok(value) => value,
+                Err(_) => {
+                    return;
+                } 
+            };
 
-        error!("{}", msg);
-        stream.write_all(&response).await.unwrap();
-        return;
-    }
+            error!("{}", msg);
+            stream.write_all(&response).await.unwrap();
+            return;
+        }
+    };
 
     raw_request = request_to_bytes(&request);
 
-    let request_id = genereate_request_id(client_id.clone());
+    let request_id = generate_request_id(client_id.clone());
 
     // check whether a cache of the request is available
     // TODO: Uniqueness up to header values (i.e: cookies) might make the cache ineffective
@@ -125,7 +128,7 @@ async fn public_handler(
     let request_method = String::from(request.method().as_str());
     let request_body = get_unique_body_as_bytes(request.clone());
 
-    info!("Public Request: [{}] [{}] {}", request_id.clone(), request_method.clone(), request_uri.clone());
+    info!("Public Request: [{}] [client: {}] [{}] {}", request_id.clone(), client_id.clone(), request_method.clone(), request_uri.clone());
 
     // check cache
     let cache_config = cache_service.get_cache_config(client_id.clone(), request_method.clone(), path.clone()).await;
@@ -151,7 +154,7 @@ async fn public_handler(
         data: raw_request
     };
 
-    // enqueue the request to redis
+    // enqueue the request
     if let Err(e) = public_service.enqueue_request(client_id.clone(), public_request).await {
         let response = match http_json_response_as_bytes(
         HttpResponse::new(false, e), StatusCode::from_u16(503).unwrap()) {
@@ -315,21 +318,17 @@ fn get_client_id<T>(mut request: Request<T>, cache_client_id: bool) -> Result<(R
     Ok((request, client_id, new_path))
 }
 
-
-// TODO: might add request body for uniqueness (?)
-fn genereate_request_id(client_id: String) -> String {
+fn generate_request_id(client_id: String) -> String {
     // combine client_id and timestamp epoch
-    let timestamp = Utc::now().timestamp_nanos_opt().unwrap().to_string();
-    let input = format!("{}{}", client_id, timestamp);
-    
+    let timestamp = Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    // add randomness
+    let mut rng = rand::rng();
+    let random_suffix: Vec<u8> = (0..10).map(|_| rng.gen()).collect();
+    // concatenate client_id, timestamp, and random value
+    let input = format!("{}{}{:?}", client_id, timestamp, random_suffix);
     // hash the value with a SHA-256 hasher
-    let mut hasher = Sha256::new();
-    hasher.update(input.as_bytes());
-    let result = hasher.finalize();
-    // convert the hashed value to a hex string
-    let hex_result = hex::encode(result);
-    // the result is fixed to 32 chars
-    let id = &hex_result[..32];
+    let hash = Sha256::digest(input.as_bytes());
     
-    id.to_string()
+    // convert the hashed value to a hex string
+    hex::encode(hash)[..32].to_string()
 }

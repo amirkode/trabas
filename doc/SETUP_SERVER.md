@@ -86,8 +86,8 @@ The public port and client port for both services are `8787` and `8789` respecti
 If the server starts successfully, the log will show:
 
 ```console
-[Public Listerner] Listening on: 0.0.0.0:8787
-[Client Listerner] Listening on: 0.0.0.0:8789
+[Public Listerner] Listening on: `0.0.0.0:8787`.
+[Client Listerner] Listening on: `0.0.0.0:8789`.
 ```
 
 ## Client Setup

@@ -42,6 +42,13 @@ Request Cache Configurations:
 ```
 Worth noting that if you the rule/config is unique by `Client ID`, `Method`, and `Path`. Setting the existing one will only replace the `Expiry Duration` value.
 
+### **SV_REDIS_ENABLE**
+
+If redis is preferred for the request queue (the value `true` or `false`):
+```console
+foo@bar:~$ trabas server set-config --redis-enable [value goes here]
+```
+
 ### **SV_REDIS_HOST**
 
 A redis host:
@@ -104,4 +111,16 @@ foo@bar:~$ trabas server set-config --client-id --server-host [value] --server-p
 Trabas also provides `--force` option to replace an existing config value as mentioned earlier:
 ```console
 foo@bar:~$ trabas server set-config --gen-key --force
+```
+## Global
+### **DEBUG**
+
+If the value is set to `true`, the service will show proper logs and won't handle any panics.
+Setting the DEBUG mode:
+```console
+foo@bar:~$ trabas global-config --set-debug
+```
+Unsetting the DEBUG mode:
+```console
+foo@bar:~$ trabas global-config --unset-debug
 ```

@@ -5,10 +5,10 @@ pub mod types;
 pub mod config;
 
 use std::sync::Arc;
-use log::info;
+use common::_info;
 
-use common::config::{ConfigHandler, ConfigHandlerImpl};
-use config::{validate_configs, get_cache_service, CONFIG_KEY_SERVER_REDIS_ENABLE};
+use common::config::{ConfigHandler, ConfigHandlerImpl, keys::CONFIG_KEY_SERVER_REDIS_ENABLE};
+use config::{validate_configs, get_cache_service};
 use data::repository::cache_repo::{CacheRepo, CacheRepoRedisImpl, CacheRepoProcMemImpl};
 use data::repository::client_repo::{ClientRepo, ClientRepoRedisImpl, ClientRepoProcMemImpl};
 use data::repository::request_repo::{RequestRepo, RequestRepoRedisImpl, RequestRepoProcMemImpl};
@@ -43,10 +43,10 @@ pub async fn entry_point(
     if use_redis {
         // store data in redis
         // TODO: add retrier if connection attempt is failed
-        info!("Redis: connecting...");
+        _info!("Redis: connecting...");
         let redis_store = RedisDataStore::new().unwrap();
         let redis_connection = redis_store.client.get_multiplexed_async_connection().await.unwrap();
-        info!("Redis: connected");
+        _info!("Redis: connected");
 
         // init repo to be injected
         let cache_repo = Arc::new(CacheRepoRedisImpl::new(redis_connection.clone()));
@@ -106,8 +106,8 @@ pub async fn run(
     let client_service = ClientService::new(client_repo);
     let public_service = PublicService::new(request_repo, response_repo, client_request_limit);
 
-    info!("[Public Listerner] Listening on :{}", public_listener.local_addr().unwrap());
-    info!("[Client Listerner] Listening on :{}", client_listener.local_addr().unwrap());
+    _info!("[Public Listerner] Listening on: `{}`", public_listener.local_addr().unwrap());
+    _info!("[Client Listerner] Listening on: `{}`", client_listener.local_addr().unwrap());
 
     loop {
         tokio::select! {

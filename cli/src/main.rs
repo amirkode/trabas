@@ -1,15 +1,13 @@
 use std::collections::HashMap;
 use std::panic;
 
-use log::{self, info, LevelFilter};
+use log::{self, LevelFilter};
 use once_cell::sync::Lazy;
 use clap::{error::ErrorKind, CommandFactory, Parser, Subcommand};
 use env_logger::{Env, Builder, Target};
-use common::{config::{init_env_from_config, set_configs}, log::StickyLogger};
+use common::{_info, config::{init_env_from_config, set_configs, keys::CONFIG_KEY_GLOBAL_DEBUG}, logger::StickyLogger};
 use trabas::{PROJECT_NAME, PROJECT_VERSION};
 use ctrlc;
-
-const CONFIG_KEY_GLOBAL_DEBUG: &str = "DEBUG";
 
 // TODO: complete help info
 #[derive(Parser)]
@@ -235,7 +233,7 @@ fn show_version() {
 }
 
 // lazy init using once_cell
-static LOGGER: Lazy<StickyLogger> = Lazy::new(|| StickyLogger::new(8, 12, false));
+static LOGGER: Lazy<StickyLogger> = Lazy::new(|| StickyLogger::new(10, 15, false));
 
 fn cleanup_logger_state() {
     if let Ok(mut state) = LOGGER.state.lock() {
@@ -266,8 +264,10 @@ fn setup_exit_handler(debug: bool) {
     }));
 }
 
-fn create_logo() -> Vec<String> {
-    // Define each letter as an array of 5 strings (7 characters wide).
+const SERVICE_TAG_CLIENT: &str = "ＣＬＩＥＮＴ";
+const SERVICE_TAG_SERVER: &str = "ＳＥＲＶＥＲ";
+
+fn create_logo(service_tag: String) -> Vec<String> {
     let t = [
         "███████",
         "   █   ",
@@ -280,7 +280,7 @@ fn create_logo() -> Vec<String> {
         "█     █",
         "███████",
         "█   █  ",
-        "█   ██ ", // Updated bottom row for R
+        "█   ██ ",
     ];
     let a = [
         "   █   ",
@@ -303,14 +303,33 @@ fn create_logo() -> Vec<String> {
         "      █",
         " █████ ",
     ];
-    
+
     let line1 = format!("{} {} {} {} {} {}", t[0], r[0], a[0], b[0], a[0], s[0]);
     let line2 = format!("{} {} {} {} {} {}", t[1], r[1], a[1], b[1], a[1], s[1]);
     let line3 = format!("{} {} {} {} {} {}", t[2], r[2], a[2], b[2], a[2], s[2]);
-    let line4 = format!("{} {} {} {} {} {}", t[3], r[3], a[3], b[3], a[3], s[3]);
+    let line4 = format!("{} {} {} {} {} {} {}", t[3], r[3], a[3], b[3], a[3], s[3], service_tag);
     let line5 = format!("{} {} {} {} {} {} v{} by Liter8.sh", t[4], r[4], a[4], b[4], a[4], s[4], PROJECT_VERSION);
-    
-    vec!["Welcome to:".to_string(), "".to_string(), line1, line2, line3, line4, line5, "".to_string()]
+
+    vec![
+        "Running:".to_string(),
+        "".to_string(),
+        line1,
+        line2,
+        line3,
+        line4,
+        line5,
+        "".to_string(),
+    ]
+}
+
+fn print_log_header(service_tag: String) {
+    let logo = create_logo(service_tag);
+    // set header height
+    LOGGER.set_header_height(logo.len());
+    for l in logo {
+        // print as raw, to avoid trailing period
+        _info!(raw: format!("{}", l));
+    }
 }
 
 fn init_logger(debug: bool) {
@@ -323,12 +342,6 @@ fn init_logger(debug: bool) {
         .target(Target::Stdout)
         .format_timestamp_millis()
         .init();
-    }
-
-    // print logo
-    let logo = create_logo();
-    for l in logo {
-        info!("{}", l);
     }
 }
 
@@ -372,6 +385,7 @@ async fn main() {
         },
         Commands::Client { action } => match action {
             ClientActions::Serve { host, port , tls } => {
+                print_log_header(SERVICE_TAG_CLIENT.to_string());
                 client::entry_point((*host).clone(), *port, *tls).await;
             },
             ClientActions::SetConfig { client_id, server_host, server_port, server_signing_key, force } => {
@@ -412,6 +426,7 @@ async fn main() {
         },
         Commands::Server { action } => match action {
             ServerActions::Run { host, public_port, client_port,  client_request_limit, cache_client_id} => {
+                print_log_header(SERVICE_TAG_SERVER.to_string());
                 let root_host = match host {
                     Some(value) => (*value).clone(),
                     None => String::from("127.0.0.1")

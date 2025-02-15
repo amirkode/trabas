@@ -1,6 +1,6 @@
 pub mod data;
 pub mod config;
 pub mod convert;
-pub mod log;
+pub mod logger;
 pub mod net;
 pub mod security;

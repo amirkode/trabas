@@ -6,21 +6,17 @@ use rand::distributions::Alphanumeric;
 use mac_address::get_mac_address; 
 use tokio_native_tls::native_tls::Certificate;
 
-use common::config::{get_configs_from_proc_env, get_config_path, set_configs};
+use common::config::*;
 
-pub const CONFIG_KEY_CLIENT_ID: &str = "CL_ID";
-pub const CONFIG_KEY_CLIENT_SERVER_HOST: &str = "CL_SERVER_HOST";
-pub const CONFIG_KEY_CLIENT_SERVER_PORT: &str = "CL_SERVER_PORT";
-pub const CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY: &str = "CL_SERVER_SIGNING_KEY";
 pub const CONFIG_CA_FILE_NAME: &str = "ca.crt";
 
 // simple validation for config keys
 pub fn validate_configs() {
     let config = get_configs_from_proc_env();
     let required_keys = [
-        CONFIG_KEY_CLIENT_ID,
-        CONFIG_KEY_CLIENT_SERVER_HOST,
-        CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY
+        keys::CONFIG_KEY_CLIENT_ID,
+        keys::CONFIG_KEY_CLIENT_SERVER_HOST,
+        keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY
     ];
     for key in required_keys {
         if !config.contains_key(key) {
@@ -32,7 +28,7 @@ pub fn validate_configs() {
 pub fn generate_client_id(custom_id: Option<String>, force: bool) -> () {
     // check whether the client is already set
     let config = get_configs_from_proc_env();
-    if config.contains_key(CONFIG_KEY_CLIENT_ID) && !force {
+    if config.contains_key(keys::CONFIG_KEY_CLIENT_ID) && !force {
         println!("Client ID is already generated, please check it in the config file. Consider using --force option to force regenerating");
         return;
     }
@@ -43,7 +39,7 @@ pub fn generate_client_id(custom_id: Option<String>, force: bool) -> () {
         custom_id.unwrap()
     };
     set_configs(HashMap::from([
-        (String::from(CONFIG_KEY_CLIENT_ID), id.clone())
+        (String::from(keys::CONFIG_KEY_CLIENT_ID), id.clone())
     ]));
 
     println!("Client ID generated!");
@@ -87,13 +83,13 @@ fn generate_client_id_from_mac_address(length: usize) -> String {
 pub fn set_server_signing_key(value: String, force: bool) -> () {
     // check whether the signing key is already set
     let config = get_configs_from_proc_env();
-    if config.contains_key(CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY) && !force {
+    if config.contains_key(keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY) && !force {
         println!("Server Signing Key is already set, please check it in the config file. Consider using --force option to force resetting");
         return;
     }
 
     set_configs(HashMap::from([
-        (String::from(CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY), value.clone())
+        (String::from(keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY), value.clone())
     ]));
 
     println!("Server Signing Key has been set!");
@@ -104,13 +100,13 @@ pub fn set_server_signing_key(value: String, force: bool) -> () {
 pub fn set_server_host(value: String, force: bool) -> () {
     // check whether the server host is already set
     let config = get_configs_from_proc_env();
-    if config.contains_key(CONFIG_KEY_CLIENT_SERVER_HOST) && !force {
+    if config.contains_key(keys::CONFIG_KEY_CLIENT_SERVER_HOST) && !force {
         println!("Server Host is already set, please check it in the config file. Consider using --force option to force resetting");
         return;
     }
 
     set_configs(HashMap::from([
-        (String::from(CONFIG_KEY_CLIENT_SERVER_HOST), value.clone())
+        (String::from(keys::CONFIG_KEY_CLIENT_SERVER_HOST), value.clone())
     ]));
 
     println!("Server Host has been set!");
@@ -121,13 +117,13 @@ pub fn set_server_host(value: String, force: bool) -> () {
 pub fn set_server_port(value: u16, force: bool) -> () {
     // check whether the server host is already set
     let config = get_configs_from_proc_env();
-    if config.contains_key(CONFIG_KEY_CLIENT_SERVER_PORT) && !force {
+    if config.contains_key(keys::CONFIG_KEY_CLIENT_SERVER_PORT) && !force {
         println!("Server Port is already set, please check it in the config file. Consider using --force option to force resetting");
         return;
     }
 
     set_configs(HashMap::from([
-        (String::from(CONFIG_KEY_CLIENT_SERVER_PORT), format!("{}", value))
+        (String::from(keys::CONFIG_KEY_CLIENT_SERVER_PORT), format!("{}", value))
     ]));
 
     println!("Server Port has been set!");

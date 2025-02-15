@@ -11,6 +11,24 @@ use std::path::Path;
 const CONFIG_PATH: &str = "trabas_config";
 const CONFIG_ENV: &str = ".env";
 
+// ALL VALID CONFIG CONSTANTS
+pub mod keys {
+    pub const CONFIG_KEY_GLOBAL_DEBUG: &str = "DEBUG";
+    // client
+    pub const CONFIG_KEY_CLIENT_ID: &str = "CL_ID";
+    pub const CONFIG_KEY_CLIENT_SERVER_HOST: &str = "CL_SERVER_HOST";
+    pub const CONFIG_KEY_CLIENT_SERVER_PORT: &str = "CL_SERVER_PORT";
+    pub const CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY: &str = "CL_SERVER_SIGNING_KEY";
+    // server
+    pub const CONFIG_KEY_SERVER_SECRET: &str = "SV_SECRET";
+    pub const CONFIG_KEY_SERVER_CACHE_CONFIGS: &str = "SV_CACHE_CONFIGS";
+    pub const CONFIG_KEY_SERVER_REDIS_ENABLE: &str = "SV_REDIS_ENABLE";
+    pub const CONFIG_KEY_SERVER_REDIS_HOST: &str = "SV_REDIS_HOST";
+    pub const CONFIG_KEY_SERVER_REDIS_PORT: &str = "SV_REDIS_PORT";
+    pub const CONFIG_KEY_SERVER_REDIS_PASS: &str = "SV_REDIS_PASS";
+    pub const CONFIG_KEY_SERVER_PUBLIC_ENDPOINT: &str = "SV_PUBLIC_ENDPOINT";
+}
+
 // TODO: should we make a config interface for both client and server (?)
 // and to be injected across the usecases (?)
 // for now, sharing config/env using std::env is a decent solution

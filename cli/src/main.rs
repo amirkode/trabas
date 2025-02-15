@@ -233,7 +233,7 @@ fn show_version() {
 }
 
 // lazy init using once_cell
-static LOGGER: Lazy<StickyLogger> = Lazy::new(|| StickyLogger::new(10, 15, false));
+static LOGGER: Lazy<StickyLogger> = Lazy::new(|| StickyLogger::new(10, 8, false));
 
 fn cleanup_logger_state() {
     if let Ok(mut state) = LOGGER.state.lock() {

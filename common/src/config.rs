@@ -13,7 +13,8 @@ const CONFIG_ENV: &str = ".env";
 
 // ALL VALID CONFIG CONSTANTS
 pub mod keys {
-    pub const CONFIG_KEY_GLOBAL_DEBUG: &str = "DEBUG";
+    pub const CONFIG_KEY_GLOBAL_DEBUG: &str = "GLOBAL_DEBUG";
+    pub const CONFIG_KEY_GLOBAL_LOG_LIMIT: &str = "GLOBAL_LOG_LIMIT";
     // client
     pub const CONFIG_KEY_CLIENT_ID: &str = "CL_ID";
     pub const CONFIG_KEY_CLIENT_SERVER_HOST: &str = "CL_SERVER_HOST";

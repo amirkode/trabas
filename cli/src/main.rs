@@ -5,38 +5,14 @@ use log::{self, LevelFilter};
 use once_cell::sync::Lazy;
 use clap::{error::ErrorKind, CommandFactory, Parser, Subcommand};
 use env_logger::{Env, Builder, Target};
-use common::{_info, config::{init_env_from_config, set_configs, keys::CONFIG_KEY_GLOBAL_DEBUG}, logger::StickyLogger};
+use common::{_info, config::{init_env_from_config, keys::{CONFIG_KEY_GLOBAL_DEBUG, CONFIG_KEY_GLOBAL_LOG_LIMIT}, set_configs}, logger::StickyLogger};
 use trabas::{PROJECT_NAME, PROJECT_VERSION};
 use ctrlc;
 
-// TODO: complete help info
-#[derive(Parser)]
-#[command(name = "trabas")]
-#[command(version = PROJECT_VERSION, about = "A lightweight http tunneling tool")]
-#[command(long_about = "A lightweight HTTP tunneling tool for securely exposing local services to the internet.")]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    GlobalConfig {
-        #[arg(long)]
-        set_debug: bool,
-        #[arg(long)]
-        unset_debug: bool,
-    },
-    Client {
-        #[command(subcommand)]
-        action: ClientActions,
-    },
-    Server {
-        #[command(subcommand)]
-        action: ServerActions,
-    },
-    Version { }
-}
+// config arg keys for global
+const CONFIG_ARG_GLOBAL_SET_DEBUG: &str = "set-debug";
+const CONFIG_ARG_GLOBAL_UNSET_DEBUG: &str = "unset-debug";
+const CONFIG_ARG_GLOBAL_LOG_LIMIT: &str = "log-limit";
 
 // config arg keys for client
 const CONFIG_ARG_CL_ID: &str = "client-id";
@@ -58,6 +34,37 @@ const CONFIG_ARG_SV_CACHE_CLIENT_ID: &str = "client-id";
 const CONFIG_ARG_SV_CACHE_METHOD: &str = "method";
 const CONFIG_ARG_SV_CACHE_PATH: &str = "path";
 const CONFIG_ARG_SV_CACHE_EXP_DURATION: &str = "exp-duration";
+
+// TODO: complete help info
+#[derive(Parser)]
+#[command(name = "trabas")]
+#[command(version = PROJECT_VERSION, about = "A lightweight http tunneling tool")]
+#[command(long_about = "A lightweight HTTP tunneling tool for securely exposing local services to the internet.")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    GlobalConfig {
+        #[arg(long)]
+        set_debug: bool,
+        #[arg(long)]
+        unset_debug: bool,
+        #[arg(long)]
+        log_limit: Option<usize>,
+    },
+    Client {
+        #[command(subcommand)]
+        action: ClientActions,
+    },
+    Server {
+        #[command(subcommand)]
+        action: ServerActions,
+    },
+    Version { }
+}
 
 // TODO: add monitoring commands
 #[derive(Subcommand)]
@@ -233,7 +240,9 @@ fn show_version() {
 }
 
 // lazy init using once_cell
-static LOGGER: Lazy<StickyLogger> = Lazy::new(|| StickyLogger::new(10, 8, false));
+static LOGGER: Lazy<StickyLogger> = Lazy::new(|| 
+    StickyLogger::new(10, 
+    std::env::var(CONFIG_KEY_GLOBAL_LOG_LIMIT).unwrap_or("5".to_string()).parse::<usize>().expect("Failed to parse"), false));
 
 fn cleanup_logger_state() {
     if let Ok(mut state) = LOGGER.state.lock() {
@@ -362,7 +371,7 @@ async fn main() {
     let cli = Cli::parse();
     
     match &cli.command {
-        Commands::GlobalConfig { set_debug, unset_debug } => {
+        Commands::GlobalConfig { set_debug, unset_debug, log_limit } => {
             if *set_debug && *unset_debug {
                 let mut cmd = Cli::command();
                 cmd.error(
@@ -371,16 +380,41 @@ async fn main() {
                 ).exit();
             }
 
+            let mut debug_config = true;
             if *set_debug {
                 set_configs(HashMap::from([
                     (String::from(CONFIG_KEY_GLOBAL_DEBUG), "true".to_string())
                 ]));
                 println!("Global config {} is set to true", CONFIG_KEY_GLOBAL_DEBUG)
-            } else {
+            } else if *unset_debug {
                 set_configs(HashMap::from([
                     (String::from(CONFIG_KEY_GLOBAL_DEBUG), "false".to_string())
                 ]));
                 println!("Global config {} is set to false", CONFIG_KEY_GLOBAL_DEBUG)
+            } else {
+                debug_config = false;
+            }
+
+            if !debug_config && log_limit.is_none() {
+                let mut cmd = Cli::command();
+                let error_message = format!(
+                    "At least one of the following arguments must be provided: --{}, --{}, or --{}",
+                    CONFIG_ARG_GLOBAL_SET_DEBUG,
+                    CONFIG_ARG_GLOBAL_UNSET_DEBUG,
+                    CONFIG_ARG_GLOBAL_LOG_LIMIT
+                );
+                
+                cmd.error(
+                    ErrorKind::MissingRequiredArgument,
+                    error_message
+                ).exit();
+            }
+
+            if let Some(limit) = log_limit {
+                set_configs(HashMap::from([
+                    (String::from(CONFIG_KEY_GLOBAL_LOG_LIMIT), limit.to_string())
+                ]));
+                println!("Global config {} is set to {}", CONFIG_KEY_GLOBAL_LOG_LIMIT, limit)
             }
         },
         Commands::Client { action } => match action {

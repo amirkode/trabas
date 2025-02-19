@@ -106,8 +106,8 @@ pub async fn run(
     let client_service = ClientService::new(client_repo);
     let public_service = PublicService::new(request_repo, response_repo, client_request_limit);
 
-    _info!("[Public Listerner] Listening on: `{}`", public_listener.local_addr().unwrap());
-    _info!("[Client Listerner] Listening on: `{}`", client_listener.local_addr().unwrap());
+    _info!("[Public Listener] Listening on: `{}`", public_listener.local_addr().unwrap());
+    _info!("[Client Listener] Listening on: `{}`", client_listener.local_addr().unwrap());
 
     loop {
         tokio::select! {

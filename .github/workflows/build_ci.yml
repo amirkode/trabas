@@ -3,7 +3,7 @@ name: Build Binary
 on:
   push:
     branches:
-      - prepare-demo
+      - main
 
 jobs:
   build:

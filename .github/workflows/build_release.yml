@@ -1,0 +1,52 @@
+name: Build and Upload Release Binary
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Rust Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Extract Version from Cargo.toml
+        id: get_version
+        shell: bash
+        run: echo "VERSION=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[0].version')" >> $GITHUB_ENV
+
+      - name: Build Release Binary
+        run: cargo build --release --manifest-path cli/Cargo.toml
+
+      - name: Upload Release Asset (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: target/release/trabas
+          asset_name: trabas-${{ env.VERSION }}-linux
+          asset_content_type: application/octet-stream
+
+      - name: Upload Release Asset (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: target/release/trabas.exe
+          asset_name: trabas-${{ env.VERSION }}-windows.exe
+          asset_content_type: application/octet-stream

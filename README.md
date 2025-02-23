@@ -63,7 +63,9 @@ Once the server and client are connected, by default, the user can access your u
 For remote server deployment, minimal config as mentioned earlier is adequate for testing purpose. But, you may secure the data exchange between client service and server service through TLS connection. The well-rounded example can be found [here](https://github.com/amirkode/trabas/blob/main/doc/SETUP_SERVER.md).
 
 ## Demo
-Soon
+Here's the demo showing how the tunneling works using `Trabas`.
+
+[![Watch the video](https://jotling.liter8.sh/trabas-demo-v1-thumbnail)](https://jotling.liter8.sh/trabas-demo-v1?media=video)
 
 ### Logs
 Soon

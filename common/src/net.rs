@@ -3,12 +3,12 @@ use std::sync::Arc;
 use futures::io;
 use http::{Request, Response, StatusCode, Version};
 use cookie::{Cookie, CookieJar};
-use log::info;
 use serde::{Deserialize, Serialize};
 use tokio::{io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf}, net::TcpStream, sync::Mutex};
 use tokio_native_tls::TlsStream;
 
 use crate::convert::response_to_bytes;
+use crate::_info;
 
 // these values are standard for this tool
 pub const HEALTH_CHECK_PACKET_ACK: &str = "hc_1565b85_ack";
@@ -235,7 +235,7 @@ pub async fn read_bytes_from_socket_for_http(stream: &mut TcpStreamTLS, res: &mu
         let curr_len = res.len();
         if prev_len == curr_len {
             if break_cnt == break_limit {
-                info!("Socket reading break limit exceeded");
+                _info!("Socket reading break limit exceeded.");
                 break;
             }
             break_cnt += 1;
@@ -309,7 +309,7 @@ pub async fn read_bytes_from_socket_for_http(stream: &mut TcpStreamTLS, res: &mu
                     let curr_len = res.len();
                     if prev_len == curr_len {
                         if break_cnt == break_limit {
-                            info!("Socket reading break limit exceeded");
+                            _info!("Socket reading break limit exceeded.");
                             break;
                         }
                         break_cnt += 1;
@@ -374,7 +374,7 @@ pub async fn read_bytes_from_socket_for_http(stream: &mut TcpStreamTLS, res: &mu
             let curr_len = res.len();
             if prev_len == curr_len {
                 if break_cnt == break_limit {
-                    info!("Socket reading break limit exceeded");
+                    _info!("Socket reading break limit exceeded.");
                     break;
                 }
                 break_cnt += 1;
@@ -433,7 +433,7 @@ impl<'a> HttpReader<'a> {
             let curr_len = res.len();
             if prev_len == curr_len {
                 if break_cnt == self.break_limit {
-                    info!("Socket reading break limit exceeded");
+                    _info!("Socket reading break limit exceeded.");
                     break;
                 }
                 break_cnt += 1;
@@ -546,7 +546,7 @@ impl<'a> HttpReader<'a> {
                     let curr_len = res.len();
                     if prev_len == curr_len {
                         if break_cnt == self.break_limit {
-                            info!("Socket reading break limit exceeded");
+                            _info!("Socket reading break limit exceeded.");
                             break;
                         }
                         break_cnt += 1;
@@ -615,7 +615,7 @@ impl<'a> HttpReader<'a> {
             let curr_len = res.len();
             if prev_len == curr_len {
                 if break_cnt == self.break_limit {
-                    info!("Socket reading break limit exceeded");
+                    _info!("Socket reading break limit exceeded.");
                     break;
                 }
                 break_cnt += 1;

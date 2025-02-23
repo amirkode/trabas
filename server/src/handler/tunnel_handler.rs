@@ -4,28 +4,27 @@ use common::data::dto::tunnel_ack::TunnelAck;
 use common::net::{
     append_path_to_url, prepare_packet, read_bytes_from_mutexed_socket_for_internal, read_bytes_from_socket_for_internal, separate_packets, TcpStreamTLS, HEALTH_CHECK_PACKET_ACK
 };
-use common::validate_signature;
-use log::{error, info};
+use common::{validate_signature, _error, _info};
 use tokio::net::TcpStream;
 use tokio::time::sleep;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use common::config;
 use common::data::dto::public_response::PublicResponse;
 use common::data::dto::tunnel_client::TunnelClient;
-use crate::config;
 use crate::service::client_service::ClientService;
 use crate::service::public_service::PublicService;
 
 pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientService, public_service: PublicService) -> () {
-    info!("Pending connection");
+    _info!("Pending connection.");
     let (read_stream, write_stream) = tokio::io::split(stream);
     let mut read_stream = TcpStreamTLS::from_tcp_read(read_stream);
     let mut write_stream = TcpStreamTLS::from_tcp_write(write_stream);
     // register client ID
     let mut raw_response = Vec::new();
     if let Err(e) = read_bytes_from_socket_for_internal(&mut read_stream, &mut raw_response).await {
-        error!("Error reading connection: {}", e);
+        _error!("Error reading connection: {}", e);
         return;
     }
 
@@ -33,19 +32,19 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     let raw_response = match packets.get(0) {
         Some(data) => data,
         None => {
-            error!("Error reading connection: empty data");
+            _error!("Error reading connection: empty data");
             return;
         }
     };
 
-    info!("Done reading connection");
+    _info!("Done reading connection.");
     let client: TunnelClient = match from_json_slice(&raw_response) {
         Some(value) => value,
         None => {
             let tunnel_ack = TunnelAck::new(false, format!("Invalid request"), vec![]);
             let packet = prepare_packet(to_json_vec(&tunnel_ack));
             write_stream.write_all(&packet).await.unwrap();
-            error!("{}", tunnel_ack.message);
+            _error!("{}", tunnel_ack.message);
             return;    
         }
     };
@@ -58,14 +57,14 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
             vec![]);
         let packet = prepare_packet(to_json_vec(&tunnel_ack));
         write_stream.write_all(&packet).await.unwrap();
-        error!("{}", tunnel_ack.message);
+        _error!("{}", tunnel_ack.message);
         return;
     }
 
     // acknowledge the successful handshake
     // public endpoints are returned by the server because server should control the mechanism
     // and might change it in the future
-    let endpoint_prefix = std::env::var(config::CONFIG_KEY_SERVER_PUBLIC_ENDPOINT).unwrap_or_default();
+    let endpoint_prefix = std::env::var(config::keys::CONFIG_KEY_SERVER_PUBLIC_ENDPOINT).unwrap_or_default();
     let public_endpoints = vec![append_path_to_url(&endpoint_prefix, &client.id), append_path_to_url(&endpoint_prefix, &client.alias_id)];
     let tunnel_ack = TunnelAck::new(
         true, 
@@ -75,7 +74,7 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     write_stream.write_all(&packet).await.unwrap();
 
     let msg = format!("Client Registration Successful. client_id: {}, signature: {}", client_id, client.signature);
-    info!("{}", msg);
+    _info!("{}", msg);
 
     // sleep for 1.5 seconds to prevent race condition with healthcheck packet
     sleep(Duration::from_millis(1500)).await;
@@ -108,7 +107,7 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
 }
 
 fn validate_connection(signature: String, client_id: String) -> bool {
-    let secret = std::env::var(config::CONFIG_KEY_SERVER_SECRET).unwrap_or_default();
+    let secret = std::env::var(config::keys::CONFIG_KEY_SERVER_SECRET).unwrap_or_default();
     validate_signature!(signature, client_id, secret)
 }
 
@@ -147,14 +146,14 @@ async fn tunnel_sender_handler(
     client_service: Arc<Mutex<ClientService>>, 
     client_id: String,
 ) {
-    info!("Tunnel sender handler started.");
+    _info!("Tunnel sender handler started.");
     
     let mut skip = 0;
     while !(*handler_stopped.lock().await) {
         // request from the queue
         match public_service.lock().await.dequeue_request(client_id.clone()).await {
             Ok(public_request) => {
-                info!("Request was found: {}", public_request.id.clone());
+                _info!("Request was found: {}", public_request.id.clone());
                 
                 // send request to client service
                 let bytes_req = prepare_packet(to_json_vec(&public_request.clone()));
@@ -166,7 +165,7 @@ async fn tunnel_sender_handler(
                     }
                 };
 
-                info!("Request: {} was sent to client: {}.", public_request.id, client_id.clone());
+                _info!("Request: {} was sent to client: {}.", public_request.id, client_id.clone());
             },
             Err(_) => {
                 skip += 1;
@@ -187,13 +186,13 @@ async fn tunnel_sender_handler(
     if !(*handler_stopped.lock().await) {
         // disconnect client
         client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
-        info!("Client Disconnected. client_id: {}", client_id);
+        _info!("Client Disconnected. client_id: {}.", client_id);
     }
 
     // update handler stop state
     (*handler_stopped.lock().await) = true;
 
-    info!("Tunnel sender handler stopped.");
+    _info!("Tunnel sender handler stopped.");
 }
 
 async fn tunnel_receiver_handler(
@@ -203,13 +202,13 @@ async fn tunnel_receiver_handler(
     client_service: Arc<Mutex<ClientService>>, 
     client_id: String
 ) {
-    info!("Tunnel receiver handler started.");
+    _info!("Tunnel receiver handler started.");
 
     while !(*handler_stopped.lock().await) {
         // get latest response from stream
         let mut raw_response = Vec::new();
         if let Err(e) = read_bytes_from_mutexed_socket_for_internal(stream.clone(), &mut raw_response).await {
-            error!("{}", e);
+            _error!("{}", e);
             break;
         }
 
@@ -229,22 +228,22 @@ async fn tunnel_receiver_handler(
             };
 
             if let Err(msg) = public_service.lock().await.assign_response(client_id.clone(), response.clone()).await {
-                error!("{}", msg);
+                _error!("{}", msg);
                 continue;
             }
 
-            info!("Response received for request: {}.", response.request_id);
+            _info!("Response received for request: {}.", response.request_id);
         }
     }
 
     if !(*handler_stopped.lock().await) {
         // disconnect client
         client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
-        info!("Client Disconnected. client_id: {}", client_id);
+        _info!("Client Disconnected. client_id: {}", client_id);
     }
 
     // update handler stop state
     (*handler_stopped.lock().await) = true;
 
-    info!("Tunnel receiver handler stopped.");
+    _info!("Tunnel receiver handler stopped.");
 }

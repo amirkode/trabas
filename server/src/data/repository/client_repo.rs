@@ -13,8 +13,8 @@ pub trait ClientRepo {
     async fn get(&self, id: String) -> Result<TunnelClient, String>;
     async fn get_id_by_alias(&self, alias_id: String) -> Result<String, String>;
     async fn create(&self, client: TunnelClient) -> Result<(), String>;
+    async fn create_alias(&self, alias_id: String, client_id: String) -> Result<(), String>;
     async fn remove_alias(&self, alias_id: String) -> Result<(), String>;
-    async fn set_dc(&self, id: String, dt: SystemTime) -> Result<(), String>;
 }
 
 // Redis implementation
@@ -55,9 +55,12 @@ impl ClientRepo for ClientRepoRedisImpl {
         let data = to_json_vec(&client);
         self.connection.clone().hset(REDIS_KEY_CLIENT_MAP, client.id.clone(), data).await
             .map_err(|e| format!("Error setting client {}: {}", client.id, e))?;
-        // set alias map
-        self.connection.clone().hset(REDIS_KEY_CLIENT_ALIAS_MAP, client.alias_id.clone(), client.id).await
-            .map_err(|e| format!("Error setting client alias {}: {}", client.alias_id, e))?;
+        Ok(())
+    }
+
+    async fn create_alias(&self, alias_id: String, client_id: String) -> Result<(), String> {
+        self.connection.clone().hset(REDIS_KEY_CLIENT_ALIAS_MAP, alias_id.clone(), client_id).await
+            .map_err(|e| format!("Error setting client alias {}: {}", alias_id, e))?;
         Ok(())
     }
 
@@ -65,12 +68,6 @@ impl ClientRepo for ClientRepoRedisImpl {
         self.connection.clone().hdel(REDIS_KEY_CLIENT_ALIAS_MAP, alias_id.clone()).await
             .map_err(|e| format!("Error unsetting client alias {}: {}", alias_id, e))?;
         Ok(())
-    }
-
-    async fn set_dc(&self, id: String, dt: SystemTime) -> Result<(), String> {
-        let mut curr_data = self.get(id).await?;
-        curr_data.conn_dc_at = Option::from(dt);
-        self.create(curr_data).await
     }
 }
 
@@ -108,21 +105,17 @@ impl ClientRepo for ClientRepoProcMemImpl {
     async fn create(&self, client: TunnelClient) -> Result<(), String> {
         let insert = client.clone();
         let key = client.id;
-        let alias = client.alias_id;
         self.data.lock().await.insert(key.clone(), insert);
-        // set alias map     
-        self.alias_map.lock().await.insert(alias, key);
+        Ok(())
+    }
+
+    async fn create_alias(&self, alias_id: String, client_id: String) -> Result<(), String> {
+        self.alias_map.lock().await.insert(alias_id, client_id);
         Ok(())
     }
 
     async fn remove_alias(&self, alias_id: String) -> Result<(), String> {
         self.alias_map.lock().await.remove(&alias_id);
         Ok(())
-    }
-
-    async fn set_dc(&self, id: String, dt: SystemTime) -> Result<(), String> {
-        let mut curr = self.get(id).await?;
-        curr.conn_dc_at = Option::from(dt);
-        self.create(curr).await
     }
 }

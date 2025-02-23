@@ -18,36 +18,42 @@ use common::{
     security::sign_value
 };
 use tokio::{net::TcpStream, sync::{Mutex, mpsc, mpsc::{Sender, Receiver}}, time::{sleep, Instant}};
-use log::{error, info};
 use tokio_native_tls::{native_tls, TlsConnector};
 
-use crate::{config::{self, get_ca_certificate}, service::underlying_service::UnderlyingService};
+use common::{_error, _info};
+use common::config::keys as config_keys;
+use crate::{config::get_ca_certificate, service::underlying_service::UnderlyingService};
 
 pub async fn register_handler(underlying_host: String, service: UnderlyingService, use_tls: bool) -> () {
     // TODO: add initial connection validation for underlying service
-    let server_host = std::env::var(config::CONFIG_KEY_CLIENT_SERVER_HOST).unwrap_or_default();
-    let server_port = std::env::var(config::CONFIG_KEY_CLIENT_SERVER_PORT).unwrap_or_default();
+    let server_host = std::env::var(config_keys::CONFIG_KEY_CLIENT_SERVER_HOST).unwrap_or_default();
+    let server_port = std::env::var(config_keys::CONFIG_KEY_CLIENT_SERVER_PORT).unwrap_or_default();
     let server_address = format!("{}:{}", server_host, server_port);
+    let debug = std::env::var(config_keys::CONFIG_KEY_GLOBAL_DEBUG).unwrap_or_default() == "true";
     // is one thousands a good enough limit (?)
     let mut max_tries = 1000;
     while max_tries > 0 {
         if max_tries < 1000 {
             // add break interval for 5 seconds
-            info!("Break for 5 seconds for the next attempt");
+            _info!("Break for 5 seconds for the next attempt.");
             sleep(Duration::from_secs(5)).await;
         }
 
         max_tries -= 1;
 
-        info!("Binding to server service: {}", server_address.clone()); 
+        _info!("Attempting to connect to server service{}...", if debug { format!(" at [{}]", server_address.clone()) } else { "".to_string() }); 
         let tcp_stream = match TcpStream::connect(server_address.clone()).await {
             Ok(ok) => ok,
             Err(e) => {
-                error!("Error connecting to [{}]: {}", server_address.clone(), e);
+                _error!("Error connecting to server service at {}: {}", server_address.clone(), e);
                 continue;
             }
         };
+
+        _info!("Initial connection established."); 
+
         let (mut read_stream, mut write_stream) = if use_tls {
+            _info!("TLS option enabled. Binding to TLS...");
             let cert = get_ca_certificate().unwrap();
             let connector = native_tls::TlsConnector::builder()
                 .add_root_certificate(cert)
@@ -56,7 +62,7 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
             let connector = TlsConnector::from(connector);
             let tls_stream = connector.connect(server_host.as_str(), tcp_stream).await.unwrap();
             let (read_stream, write_stream) = tokio::io::split(tls_stream);
-            info!("TLS Bound to address: {}", server_address.clone());
+            _info!("TLS binding successful.");
             (TcpStreamTLS::from_tcp_tls_read(read_stream), TcpStreamTLS::from_tcp_tls_write(write_stream))
         } else { 
             let (read_stream, write_stream) = tokio::io::split(tcp_stream);
@@ -66,44 +72,45 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         let tunnel_client = get_tunnel_client();
         let packet = prepare_packet(to_json_vec(&tunnel_client));
 
-        info!("Connecting to server service...");
+        _info!("Connecting to server service for authentication and registration...");
+        
         if let Err(e) = write_stream.write_all(&packet).await {
-            error!("Error connecting to server service: {}", e);
+            _error!("Failed to send authentication packet: {}", e);
             continue;
         }
-
-        // check if the server handshake was successful
+        
         let mut server_response = Vec::new();
         if let Err(e) = read_bytes_from_socket_for_internal(&mut read_stream, &mut server_response).await {
-            error!("Error connecting to server service: {}", e);
+            _error!("Failed to read server service response: {}", e);
             continue;
         }
-
+        
         let packets = separate_packets(server_response);
         let server_response = match packets.get(0) {
             Some(data) => data,
             None => {
-                error!("Error connecting to server service: Empty data returned by server");
+                _error!("Handshake failed: Empty response from server service.");
                 return;
             }
         };
+        
         let ack: TunnelAck = match from_json_slice(&server_response) {
             Some(value) => value,
             None => {
-                error!("Error connecting to server service: Invalid response");
+                _error!("Handshake failed: Invalid JSON response from server service.");
                 return;    
             }
         };
-
+        
         if !ack.success {
-            error!("Error connecting to server service: {}", ack.message);
+            _error!("Server service rejected connection: {}", ack.message);
             continue;
         }
 
-        info!("Connected to server service.");
-        info!("Available Public Endpoints:");
+        _info!("Successfully authenticated and registered with the server service.");
+        _info!(raw: "Available Public Endpoints:");
         for endpoint in ack.public_endpoints {
-            info!("* {}", endpoint);
+            _info!("* `{}`", endpoint);
         }
         
         // create channel for request queue
@@ -134,14 +141,14 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         sender_handler.await.unwrap_or_default();
     }
 
-    info!("Max server binding retries exceeded.");
+    _info!("Max server binding retries exceeded.");
 }
 
 fn get_tunnel_client() -> TunnelClient {
-    let client_id = std::env::var(config::CONFIG_KEY_CLIENT_ID)
-        .expect(format!("{} env has not been set", config::CONFIG_KEY_CLIENT_ID).as_str());
-    let signing_key = std::env::var(config::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY)
-        .expect(format!("{} env has not been set", config::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY).as_str());
+    let client_id = std::env::var(config_keys::CONFIG_KEY_CLIENT_ID)
+        .expect(format!("{} env has not been set", config_keys::CONFIG_KEY_CLIENT_ID).as_str());
+    let signing_key = std::env::var(config_keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY)
+        .expect(format!("{} env has not been set", config_keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY).as_str());
     let signature = sign_value(client_id.clone(), signing_key);
     TunnelClient::new(client_id, signature)
 }
@@ -153,12 +160,12 @@ pub async fn tunnel_receiver_handler(
     underlying_host: String, 
     service: UnderlyingService
 ) {
-    info!("Tunnel receiver handler started.");
+    _info!("Tunnel receiver handler started.");
     while !(*handler_stopped.lock().await) {
         // get incoming request server service to forward
         let mut request = Vec::new();
         if let Err(e) = read_bytes_from_mutexed_socket_for_internal(stream.clone(), &mut request).await {
-            error!("{}", e);
+            _error!("{}", e);
             break;
         }
 
@@ -171,7 +178,7 @@ pub async fn tunnel_receiver_handler(
         for packet in packets {
             let public_request: PublicRequest = from_json_slice(&packet).unwrap(); // assuming correct format
             let start_request = Instant::now();
-            info!("Incoming request: {} received, forwarding to underlying service...", public_request.id);
+            _info!("Incoming request: {} received, forwarding to underlying service...", public_request.id);
             
             // dispatch request to underlying service
             let cloned_underlying_host = underlying_host.clone();
@@ -183,7 +190,7 @@ pub async fn tunnel_receiver_handler(
                         PublicResponse::new(public_request.id.clone(), res.clone())
                     },
                     Err(err) => {
-                        error!("Request [{}] cannot be processed: {}", public_request.id.clone(), err);
+                        _error!("Request [{}] cannot be processed: {}", public_request.id.clone(), err);
                         let msg = String::from("Request cannot be processed");
                         let res = http_json_response_as_bytes(
                             HttpResponse::new(false, msg), StatusCode::from_u16(400).unwrap()).unwrap();
@@ -192,7 +199,7 @@ pub async fn tunnel_receiver_handler(
                 };
         
                 if let Ok(_) = cloned_tx.lock().await.send(public_response).await {
-                    info!("Response for request {} received in {} seconds and was enqueued to forward back", public_request.id, start_request.elapsed().as_secs());
+                    _info!("Response for request {} received in {} seconds and was enqueued to forward back.", public_request.id, start_request.elapsed().as_secs());
                 }
             });
         }
@@ -201,7 +208,7 @@ pub async fn tunnel_receiver_handler(
     // update handler stop state
     (*handler_stopped.lock().await) = true;
 
-    info!("Tunnel receiver handler stopped.");
+    _info!("Tunnel receiver handler stopped.");
 }
 
 pub async fn tunnel_sender_handler(
@@ -209,20 +216,20 @@ pub async fn tunnel_sender_handler(
     stream: Arc<Mutex<TcpStreamTLS>>,
     rx: Arc<Mutex<Receiver<PublicResponse>>>
 ) {
-    info!("Tunnel sender handler started.");
+    _info!("Tunnel sender handler started.");
     let mut skip = 0;
     while !(*handler_stopped.lock().await) {
         // get ready public responses from the queue
         if let Some(public_response) = rx.lock().await.recv().await {
-            info!("Response for request: {} is available.", public_response.request_id);
+            _info!("Response for request: {} is available.", public_response.request_id);
             // foward response from underlying service to server service
             let bytes_res = prepare_packet(to_json_vec(&public_response));
             if let Err(e) = stream.lock().await.write_all(&bytes_res).await {
-                error!("{}", e);
+                _error!("{}", e);
                 break;
             }
 
-            info!("Request: {} processed.", public_response.request_id);
+            _info!("Request: {} processed.", public_response.request_id);
         } else {
             skip += 1;
             // every 20k skips send health check
@@ -241,5 +248,5 @@ pub async fn tunnel_sender_handler(
     // update handler stop state
     (*handler_stopped.lock().await) = true;
 
-    info!("Tunnel sender handler stopped.");
+    _info!("Tunnel sender handler stopped.");
 }

@@ -37,7 +37,7 @@ Here's how to start tunneling:
 
 **Server Service**
 
-Ensure a redis server is available in your system. Then, initialize the config as mentioned [here](https://github.com/amirkode/trabas/blob/main/doc/CONFIG.md).
+Ensure a redis server is available in your system if the `SV_REDIS_ENABLE` config is set to `true`. Then, initialize the config as mentioned [here](https://github.com/amirkode/trabas/blob/main/doc/CONFIG.md).
 Start the service:
 ```console
 foo@bar:~$ trabas server run --public-port 8001 --client-port 8002
@@ -56,12 +56,16 @@ this starts the public request and client service listeners.
 
 Once the server and client are connected, by default, the user can access your underlying service on `serverhost:8001/[client id]` (you might proxify the server to hide the actual port). But, you also directly access it on `serverhost:8001` with `trabas_client_id` cookie header sent by the client and you need to enable this feature by an additional `--cache-client-id` flag on server service.
 
+**Note** that the public endpoint will also be returned by the server once a connection successfully established.
+
 ## Deployment
 
 For remote server deployment, minimal config as mentioned earlier is adequate for testing purpose. But, you may secure the data exchange between client service and server service through TLS connection. The well-rounded example can be found [here](https://github.com/amirkode/trabas/blob/main/doc/SETUP_SERVER.md).
 
 ## Demo
-Soon
+Here's the demo showing how the tunneling works using `Trabas`.
+
+[![Watch the video](https://jotling.liter8.sh/trabas-demo-v1-thumbnail)](https://jotling.liter8.sh/trabas-demo-v1?media=video)
 
 ### Logs
 Soon

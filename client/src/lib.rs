@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
+use common::_info;
 use config::validate_configs;
 use data::repository::underlying_repo::{UnderlyingRepo, UnderlyingRepoImpl};
 use handler::main_handler::register_handler;
-use log::info;
 use service::underlying_service::UnderlyingService;
 
 pub mod config;
@@ -37,5 +37,5 @@ pub async fn serve(
     // register handler
     register_handler(underlying_svc_address, underlying_service, use_tls).await;
 
-    info!("Client Service Stopped");
+    _info!("Client Service Stopped.");
 }

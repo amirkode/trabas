@@ -38,21 +38,17 @@ impl ClientRepo for MockClientRepo {
     async fn create(&self, client: TunnelClient) -> Result<(), String> {
         let insert = client.clone();
         let key = client.id;
-        let alias = client.alias_id;
         self.mock_data.lock().await.insert(key.clone(), insert);
-        // set alias map     
-        self.mock_alias_map.lock().await.insert(alias, key);
+        Ok(())
+    }
+
+    async fn create_alias(&self, alias_id: String, client_id: String) -> Result<(), String> {
+        self.mock_alias_map.lock().await.insert(alias_id, client_id);
         Ok(())
     }
 
     async fn remove_alias(&self, alias_id: String) -> Result<(), String> {
         self.mock_alias_map.lock().await.remove(&alias_id);
         Ok(())
-    }
-
-    async fn set_dc(&self, id: String, dt: SystemTime) -> Result<(), String> {
-        let mut curr = self.get(id).await?;
-        curr.conn_dc_at = Option::from(dt);
-        self.create(curr).await
     }
 }

@@ -1,12 +1,8 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, atomic::{AtomicUsize, Ordering}};
 use std::io::{stdout, Write};
 use log::{Record, Level, Metadata};
 use chrono::Local;
 use crossterm::terminal::size;
-
-// TODO: styling the log costs us performance, might optimize later by adding option no show log
-// for now, it's optimized by building all logs in a single string before output
-// without truncating the buffer vector directly only certain limit `MAX_BODY_LOGS`
 
 const MAX_BODY_LOGS: usize = 2000;
 
@@ -19,9 +15,9 @@ pub struct LoggerState {
 
 pub struct StickyLogger {
     pub state: Mutex<LoggerState>,
-    header_lines: usize,
-    body_lines: usize,
-    show_newest_first: bool, // true: newest-first, false: oldest-first
+    header_height: AtomicUsize,
+    body_height: usize,
+    show_newest_first: bool,
 }
 
 impl StickyLogger {
@@ -35,8 +31,8 @@ impl StickyLogger {
 
         StickyLogger {
             state: Mutex::new(state),
-            header_lines,
-            body_lines,
+            header_height: AtomicUsize::new(header_lines),
+            body_height: body_lines,
             show_newest_first,
         }
     }
@@ -68,8 +64,9 @@ impl StickyLogger {
         let mut out = String::with_capacity(1024);
         out.push_str("\x1b[H"); // reset cursor to home position
 
-        // draw header section.
-        for i in 0..self.header_lines {
+        // use the current header_height from the AtomicUsize
+        let header_height = self.header_height.load(Ordering::Relaxed);
+        for i in 0..header_height {
             out.push_str("\x1b[2K"); // Clear current line
             if i < state.header_buffer.len() {
                 out.push_str(&state.header_buffer[i]);
@@ -85,16 +82,16 @@ impl StickyLogger {
 
         // draw body section.
         let total = state.body_buffer.len();
-        let count = self.body_lines.min(total);
+        let count = self.body_height.min(total);
         let start_idx = total.saturating_sub(count);
         if self.show_newest_first {
-            for msg in state.body_buffer[start_idx..].iter().rev().take(self.body_lines) {
+            for msg in state.body_buffer[start_idx..].iter().rev().take(self.body_height) {
                 out.push_str("\x1b[2K");
                 out.push_str(msg);
                 out.push('\n');
             }
         } else {
-            for msg in state.body_buffer[start_idx..].iter().take(self.body_lines) {
+            for msg in state.body_buffer[start_idx..].iter().take(self.body_height) {
                 out.push_str("\x1b[2K");
                 out.push_str(msg);
                 out.push('\n');
@@ -103,6 +100,11 @@ impl StickyLogger {
         
         state.writer.write_all(out.as_bytes()).unwrap();
         state.writer.flush().unwrap();
+    }
+
+    // Change set_header_height to take &self and use the AtomicUsize
+    pub fn set_header_height(&self, height: usize) {
+        self.header_height.store(height, Ordering::Relaxed);
     }
 }
 
@@ -115,20 +117,20 @@ impl log::Log for StickyLogger {
         if self.enabled(record.metadata()) {
             let mut state = self.state.lock().unwrap();
             // exclude header logs from formatting.
-            let msg = if state.header_buffer.len() < self.header_lines {
+            let msg = if state.header_buffer.len() < self.header_height.load(Ordering::Relaxed) {
                 record.args().to_string()
             } else {
                 self.format_log_message(record)
             };
     
-            if state.header_buffer.len() < self.header_lines {
+            if state.header_buffer.len() < self.header_height.load(Ordering::Relaxed) {
                 state.header_buffer.push(msg);
             } else {
-                // trucate if exceeding limit to avoid memory leakage
+                // truncate if exceeding limit to avoid memory leakage
                 state.body_buffer.push(msg);
                 if state.body_buffer.len() > MAX_BODY_LOGS {
                     let len = state.body_buffer.len();
-                    let drain_count = MAX_BODY_LOGS.saturating_sub(self.body_lines);
+                    let drain_count = MAX_BODY_LOGS.saturating_sub(self.body_height);
                     state.body_buffer.drain(0..(len - drain_count));
                 }
             }
@@ -149,3 +151,54 @@ impl Drop for StickyLogger {
         }
     }
 }
+
+
+// LOG message normalization to add period in the end
+/// Usage examples:
+/// - _info!(raw: format!("Address: {}", "address".to_string())); -> "Address: address"
+/// - _info!(raw: "Hello"); -> "Hello"
+/// - _info!("Address: {}", "address".to_string()); -> "Address: address."
+/// - _info!("Hello"); -> "Hello."
+#[macro_export]
+macro_rules! _info {
+    (raw: $msg:expr) => {{
+        ::log::info!("{}", $msg)
+    }};
+    (raw: $fmt:literal, $($arg:expr),+ $(,)?) => {{
+        ::log::info!($fmt, $($arg),+)
+    }};
+    ($($arg:tt)*) => {{
+        let message = format!($($arg)*);
+        let normalized_message = if message.trim_end().ends_with('.') {
+            message
+        } else {
+            message + "."
+        };
+        ::log::info!("{}", normalized_message);
+    }};
+}
+
+/// Usage examples:
+/// - _error!(raw: format!("Address: {}", "address".to_string())); -> "Address: address"
+/// - _error!(raw: "Hello"); -> "Hello"
+/// - _error!("Address: {}", "address".to_string()); -> "Address: address."
+/// - _error!("Hello"); -> "Hello."
+#[macro_export]
+macro_rules! _error {
+    (raw: $msg:expr) => {{
+        ::log::error!("{}", $msg)
+    }};
+    (raw: $fmt:literal, $($arg:expr),+ $(,)?) => {{
+        ::log::error!($fmt, $($arg),+)
+    }};
+    ($($arg:tt)*) => {{
+        let message = format!($($arg)*);
+        let normalized_message = if message.trim_end().ends_with('.') {
+            message
+        } else {
+            message + "."
+        };
+        ::log::error!("{}", normalized_message);
+    }};
+}
+

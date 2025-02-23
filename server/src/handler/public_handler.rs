@@ -12,12 +12,12 @@ use common::net::{
 };
 use hex;
 use rand::{self, Rng};
-use log::{error, info};
 use multipart::server::Multipart;
 use sha2::{Sha256, Digest};
 use http::{Request, StatusCode, Uri};
 use tokio::net::TcpStream;
 use common::data::dto::public_request::PublicRequest;
+use common::{_info, _error};
 use crate::service::cache_service::CacheService;
 use crate::service::client_service::ClientService;
 use crate::service::public_service::PublicService;
@@ -50,11 +50,11 @@ async fn public_handler(
     // read data as bytes
     let mut raw_request = Vec::new();
     if let Err(e) = HttpReader::from_tcp_stream(&mut stream).read(&mut raw_request, true).await {
-        error!("Error reading incoming request: {}", e);
+        _error!("Error reading incoming request: {}", e);
         return;
     }
 
-    info!("New request has just been read");
+    _info!("New request has just been read.");
 
     // parse the raw request
     let request = match parse_request_bytes(&raw_request) {
@@ -69,7 +69,7 @@ async fn public_handler(
                 } 
             };
 
-            error!("{}", msg);
+            _error!("{}", msg);
             stream.write_all(&response).await.unwrap();
             return;
         }   
@@ -79,7 +79,7 @@ async fn public_handler(
     let (request, client_id, path) = match get_client_id(request, cache_client_id) {
         Ok(value) => value,
         Err(msg) => {
-            error!("{}", msg);
+            _error!("{}", msg);
             let response = match http_json_response_as_bytes(
             HttpResponse::new(false, msg), StatusCode::from_u16(400).unwrap()) {
                 Ok(value) => value,
@@ -107,7 +107,7 @@ async fn public_handler(
                 } 
             };
 
-            error!("{}", msg);
+            _error!("{}", msg);
             stream.write_all(&response).await.unwrap();
             return;
         }
@@ -128,7 +128,7 @@ async fn public_handler(
     let request_method = String::from(request.method().as_str());
     let request_body = get_unique_body_as_bytes(request.clone());
 
-    info!("Public Request: [{}] [client: {}] [{}] {}", request_id.clone(), client_id.clone(), request_method.clone(), request_uri.clone());
+    _info!("Public Request: `{}`, client: `{}`, path: [{}] `{}`", request_id.clone(), client_id.clone(), request_method.clone(), request_uri.clone());
 
     // check cache
     let cache_config = cache_service.get_cache_config(client_id.clone(), request_method.clone(), path.clone()).await;
@@ -136,14 +136,14 @@ async fn public_handler(
         Ok(_) => {
             match cache_service.get_cache(client_id.clone(), request_uri.clone(), request_method.clone(), request_body.clone()).await {
                 Ok(cached_response) => {
-                    info!("Public Request: {} processed [cache hit].", request_id);
+                    _info!("Public Request: {} processed [cache hit].", request_id);
         
                     // return the cached response to public client
                     stream.write_all(&cached_response).await.unwrap();
         
                     return
                 },
-                Err(msg) => { error!("Error getting cache for request {}: {}", request_id.clone(), msg) } // ignore error
+                Err(msg) => { _error!("Error getting cache for request {}: {}", request_id.clone(), msg) } // ignore error
             }
         },
         Err(_) => {}
@@ -168,14 +168,14 @@ async fn public_handler(
         return;
     };
 
-    info!("Public Request: {} was enqueued.", request_id.clone());
+    _info!("Public Request: {} was enqueued.", request_id.clone());
     
     // wait for response
     let timeout = 60u64; // time out in 60 seconds
     let res = match public_service.get_response(client_id.clone(), request_id.clone(), timeout).await {
         Ok(value) => value,
         Err(msg) => {
-            error!("{}", msg);
+            _error!("{}", msg);
             let response = http_json_response_as_bytes(
                 HttpResponse::new(false, msg), StatusCode::from_u16(400).unwrap()).unwrap();
 
@@ -194,13 +194,13 @@ async fn public_handler(
     match cache_config {
         Ok(config) => {
             if let Err(msg) = cache_service.set_cache(client_id, request_uri, request_method, request_body, res.clone(), config).await {
-                error!("Error writing cache for request {}: {}", request_id.clone(), msg);
+                _error!("Error writing cache for request {}: {}", request_id.clone(), msg);
             }
         },
         Err(_) => {}
     }
 
-    info!("Public Request: {} processed.", request_id);
+    _info!("Public Request: {} processed.", request_id);
 
     // finally return the response to public client
     stream.write_all(&res).await.unwrap();

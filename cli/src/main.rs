@@ -1,44 +1,18 @@
 use std::collections::HashMap;
 use std::panic;
 
-use log::{self, info, LevelFilter};
+use log::{self, LevelFilter};
 use once_cell::sync::Lazy;
 use clap::{error::ErrorKind, CommandFactory, Parser, Subcommand};
 use env_logger::{Env, Builder, Target};
-use common::{config::{init_env_from_config, set_configs}, log::StickyLogger};
+use common::{_info, config::{init_env_from_config, keys::{CONFIG_KEY_GLOBAL_DEBUG, CONFIG_KEY_GLOBAL_LOG_LIMIT}, set_configs}, logger::StickyLogger};
 use trabas::{PROJECT_NAME, PROJECT_VERSION};
 use ctrlc;
 
-const CONFIG_KEY_GLOBAL_DEBUG: &str = "DEBUG";
-
-// TODO: complete help info
-#[derive(Parser)]
-#[command(name = "trabas")]
-#[command(version = PROJECT_VERSION, about = "A lightweight http tunneling tool")]
-#[command(long_about = "A lightweight HTTP tunneling tool for securely exposing local services to the internet.")]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    GlobalConfig {
-        #[arg(long)]
-        set_debug: bool,
-        #[arg(long)]
-        unset_debug: bool,
-    },
-    Client {
-        #[command(subcommand)]
-        action: ClientActions,
-    },
-    Server {
-        #[command(subcommand)]
-        action: ServerActions,
-    },
-    Version { }
-}
+// config arg keys for global
+const CONFIG_ARG_GLOBAL_SET_DEBUG: &str = "set-debug";
+const CONFIG_ARG_GLOBAL_UNSET_DEBUG: &str = "unset-debug";
+const CONFIG_ARG_GLOBAL_LOG_LIMIT: &str = "log-limit";
 
 // config arg keys for client
 const CONFIG_ARG_CL_ID: &str = "client-id";
@@ -60,6 +34,37 @@ const CONFIG_ARG_SV_CACHE_CLIENT_ID: &str = "client-id";
 const CONFIG_ARG_SV_CACHE_METHOD: &str = "method";
 const CONFIG_ARG_SV_CACHE_PATH: &str = "path";
 const CONFIG_ARG_SV_CACHE_EXP_DURATION: &str = "exp-duration";
+
+// TODO: complete help info
+#[derive(Parser)]
+#[command(name = "trabas")]
+#[command(version = PROJECT_VERSION, about = "A lightweight http tunneling tool")]
+#[command(long_about = "A lightweight HTTP tunneling tool for securely exposing local services to the internet.")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    GlobalConfig {
+        #[arg(long)]
+        set_debug: bool,
+        #[arg(long)]
+        unset_debug: bool,
+        #[arg(long)]
+        log_limit: Option<usize>,
+    },
+    Client {
+        #[command(subcommand)]
+        action: ClientActions,
+    },
+    Server {
+        #[command(subcommand)]
+        action: ServerActions,
+    },
+    Version { }
+}
 
 // TODO: add monitoring commands
 #[derive(Subcommand)]
@@ -235,7 +240,9 @@ fn show_version() {
 }
 
 // lazy init using once_cell
-static LOGGER: Lazy<StickyLogger> = Lazy::new(|| StickyLogger::new(8, 12, false));
+static LOGGER: Lazy<StickyLogger> = Lazy::new(|| 
+    StickyLogger::new(10, 
+    std::env::var(CONFIG_KEY_GLOBAL_LOG_LIMIT).unwrap_or("5".to_string()).parse::<usize>().expect("Failed to parse"), false));
 
 fn cleanup_logger_state() {
     if let Ok(mut state) = LOGGER.state.lock() {
@@ -266,8 +273,10 @@ fn setup_exit_handler(debug: bool) {
     }));
 }
 
-fn create_logo() -> Vec<String> {
-    // Define each letter as an array of 5 strings (7 characters wide).
+const SERVICE_TAG_CLIENT: &str = "ＣＬＩＥＮＴ";
+const SERVICE_TAG_SERVER: &str = "ＳＥＲＶＥＲ";
+
+fn create_logo(service_tag: String) -> Vec<String> {
     let t = [
         "███████",
         "   █   ",
@@ -280,7 +289,7 @@ fn create_logo() -> Vec<String> {
         "█     █",
         "███████",
         "█   █  ",
-        "█   ██ ", // Updated bottom row for R
+        "█   ██ ",
     ];
     let a = [
         "   █   ",
@@ -303,14 +312,33 @@ fn create_logo() -> Vec<String> {
         "      █",
         " █████ ",
     ];
-    
+
     let line1 = format!("{} {} {} {} {} {}", t[0], r[0], a[0], b[0], a[0], s[0]);
     let line2 = format!("{} {} {} {} {} {}", t[1], r[1], a[1], b[1], a[1], s[1]);
     let line3 = format!("{} {} {} {} {} {}", t[2], r[2], a[2], b[2], a[2], s[2]);
-    let line4 = format!("{} {} {} {} {} {}", t[3], r[3], a[3], b[3], a[3], s[3]);
+    let line4 = format!("{} {} {} {} {} {} {}", t[3], r[3], a[3], b[3], a[3], s[3], service_tag);
     let line5 = format!("{} {} {} {} {} {} v{} by Liter8.sh", t[4], r[4], a[4], b[4], a[4], s[4], PROJECT_VERSION);
-    
-    vec!["Welcome to:".to_string(), "".to_string(), line1, line2, line3, line4, line5, "".to_string()]
+
+    vec![
+        "Running:".to_string(),
+        "".to_string(),
+        line1,
+        line2,
+        line3,
+        line4,
+        line5,
+        "".to_string(),
+    ]
+}
+
+fn print_log_header(service_tag: String) {
+    let logo = create_logo(service_tag);
+    // set header height
+    LOGGER.set_header_height(logo.len());
+    for l in logo {
+        // print as raw, to avoid trailing period
+        _info!(raw: format!("{}", l));
+    }
 }
 
 fn init_logger(debug: bool) {
@@ -323,12 +351,6 @@ fn init_logger(debug: bool) {
         .target(Target::Stdout)
         .format_timestamp_millis()
         .init();
-    }
-
-    // print logo
-    let logo = create_logo();
-    for l in logo {
-        info!("{}", l);
     }
 }
 
@@ -349,7 +371,7 @@ async fn main() {
     let cli = Cli::parse();
     
     match &cli.command {
-        Commands::GlobalConfig { set_debug, unset_debug } => {
+        Commands::GlobalConfig { set_debug, unset_debug, log_limit } => {
             if *set_debug && *unset_debug {
                 let mut cmd = Cli::command();
                 cmd.error(
@@ -358,20 +380,46 @@ async fn main() {
                 ).exit();
             }
 
+            let mut debug_config = true;
             if *set_debug {
                 set_configs(HashMap::from([
                     (String::from(CONFIG_KEY_GLOBAL_DEBUG), "true".to_string())
                 ]));
                 println!("Global config {} is set to true", CONFIG_KEY_GLOBAL_DEBUG)
-            } else {
+            } else if *unset_debug {
                 set_configs(HashMap::from([
                     (String::from(CONFIG_KEY_GLOBAL_DEBUG), "false".to_string())
                 ]));
                 println!("Global config {} is set to false", CONFIG_KEY_GLOBAL_DEBUG)
+            } else {
+                debug_config = false;
+            }
+
+            if !debug_config && log_limit.is_none() {
+                let mut cmd = Cli::command();
+                let error_message = format!(
+                    "At least one of the following arguments must be provided: --{}, --{}, or --{}",
+                    CONFIG_ARG_GLOBAL_SET_DEBUG,
+                    CONFIG_ARG_GLOBAL_UNSET_DEBUG,
+                    CONFIG_ARG_GLOBAL_LOG_LIMIT
+                );
+                
+                cmd.error(
+                    ErrorKind::MissingRequiredArgument,
+                    error_message
+                ).exit();
+            }
+
+            if let Some(limit) = log_limit {
+                set_configs(HashMap::from([
+                    (String::from(CONFIG_KEY_GLOBAL_LOG_LIMIT), limit.to_string())
+                ]));
+                println!("Global config {} is set to {}", CONFIG_KEY_GLOBAL_LOG_LIMIT, limit)
             }
         },
         Commands::Client { action } => match action {
             ClientActions::Serve { host, port , tls } => {
+                print_log_header(SERVICE_TAG_CLIENT.to_string());
                 client::entry_point((*host).clone(), *port, *tls).await;
             },
             ClientActions::SetConfig { client_id, server_host, server_port, server_signing_key, force } => {
@@ -412,6 +460,7 @@ async fn main() {
         },
         Commands::Server { action } => match action {
             ServerActions::Run { host, public_port, client_port,  client_request_limit, cache_client_id} => {
+                print_log_header(SERVICE_TAG_SERVER.to_string());
                 let root_host = match host {
                     Some(value) => (*value).clone(),
                     None => String::from("127.0.0.1")

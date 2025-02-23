@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use cli_table::{format::Justify, Cell, Style, Table};
-use log::info;
 use sha2::{Digest, Sha256};
 
 use common::data::dto::{cache::Cache, cache_config::CacheConfig};
 use common::config::ConfigHandler;
 use common::convert::{from_json_string, to_json_string};
+use common::_info;
 use crate::data::repository::cache_repo::CacheRepo;
 
 // #[deprecated(since = "New implementation using local.env file", note = "Ignore this.")]
@@ -51,7 +51,7 @@ impl CacheService {
         let cache = self.cache_repo.get(key.clone()).await?;
         match cache.expired_at.elapsed() {
             Ok(duration) => return Err(format!("Cache {} has been expired for {} seconds", key, duration.as_secs())),
-            Err(_) => info!("A valid cache for {} was found", key),
+            Err(_) => _info!("A valid cache for {} was found", key),
         }
 
         Ok(cache.data)

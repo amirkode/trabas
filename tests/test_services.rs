@@ -2,14 +2,12 @@
 mod tests {
     use std::{collections::HashMap, env, sync::Arc, time::Duration};
 
+    use common::{_error, _info};
+    use common::config::keys as config_keys;
     use common::data::dto::cache_config::CacheConfig;
     use env_logger::{Env, Builder, Target};
-    use log::{error, info};
     use reqwest::{header::{HeaderMap, HeaderValue, COOKIE, SET_COOKIE}, Client, Response};
-    use server::{
-        service::cache_service::CacheService,
-        config::CONFIG_KEY_SERVER_CACHE_CONFIGS
-    };
+    use server::service::cache_service::CacheService;
     use std::sync::Once;
     use tokio::{sync::Mutex, task::{self, JoinHandle}, time::sleep};
     use std::sync::Mutex as StdMutex;
@@ -57,10 +55,10 @@ mod tests {
         INIT.call_once(|| {
             // mock env/config
             let server_secret = "74657374696e676b6579313233343536";
-            env::set_var(String::from(server::config::CONFIG_KEY_SERVER_SECRET), server_secret);
-            env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_SERVER_HOST), "127.0.0.1");
-            env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_SERVER_PORT), "3334");
-            env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY), server_secret);
+            env::set_var(String::from(config_keys::CONFIG_KEY_SERVER_SECRET), server_secret);
+            env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_SERVER_HOST), "127.0.0.1");
+            env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_SERVER_PORT), "3334");
+            env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY), server_secret);
 
             // init logger
             Builder::from_env(Env::default().default_filter_or("info"))
@@ -107,7 +105,7 @@ mod tests {
         let use_tls = false;
 
         // set client1 id
-        env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_ID), "client1");
+        env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_ID), "client1");
 
         // run 3 clients
         let client1_exec = tokio::spawn(async move {
@@ -117,7 +115,7 @@ mod tests {
         // delay for 2 seconds to wait the client 1 to start up
         sleep(Duration::from_secs(2)).await;
         // set client2 id
-        env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_ID), "client2");
+        env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_ID), "client2");
 
         let client2_exec = tokio::spawn(async move {
             client::serve(String::from("The target underlying address, This has no effect"), underlying_repo2, use_tls).await;
@@ -126,7 +124,7 @@ mod tests {
         // delay for 2 seconds to wait the client 2 to start up
         sleep(Duration::from_secs(2)).await;
         // set client3 id
-        env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_ID), "client3");
+        env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_ID), "client3");
 
         let client3_exec = tokio::spawn(async move {
             client::serve(String::from("The target underlying address, This has no effect"), underlying_repo3, use_tls).await;
@@ -198,7 +196,7 @@ mod tests {
         let use_tls = false;
 
         // set client1 id
-        env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_ID), "client1");
+        env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_ID), "client1");
         
         let client_exec = tokio::spawn(async move {
             client::serve(underlying_svc_address, underlying_repo, use_tls).await;
@@ -221,7 +219,7 @@ mod tests {
                         responses_clone.lock().await.push(res.text().await.unwrap());
                     },
                     Err(err) => {
-                        error!("Error getting response: {}", err);
+                        _error!("Error getting response: {}", err);
                     }
                 };
             });
@@ -238,7 +236,7 @@ mod tests {
         }
 
         let success_cnt = responses.lock().await.len();
-        info!("Request success count: {}", success_cnt);
+        _info!("Request success count: {}", success_cnt);
         assert!(success_cnt < request_cnt);
 
         // abort all services
@@ -258,7 +256,7 @@ mod tests {
         let response_repo = Arc::new(MockResponseRepo::new());
         let config_handler = Arc::new(MockConfigHandlerImpl::new());
         let cache_service = CacheService::new(
-            cache_repo.clone(), config_handler.clone(), String::from(CONFIG_KEY_SERVER_CACHE_CONFIGS));
+            cache_repo.clone(), config_handler.clone(), String::from(config_keys::CONFIG_KEY_SERVER_CACHE_CONFIGS));
         let public_svc_address = String::from("127.0.0.1:3333");
         let client_svc_address = String::from("127.0.0.1:3334");
         let server_exec = tokio::spawn(async move {
@@ -293,7 +291,7 @@ mod tests {
         let use_tls = false;
 
         // set client1 id
-        env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_ID), "client1");
+        env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_ID), "client1");
 
         let client_exec = tokio::spawn(async move {
             client::serve(underlying_svc_address, underlying_repo, use_tls).await;
@@ -319,7 +317,7 @@ mod tests {
                         responses_clone.lock().await.push(res.text().await.unwrap());
                     },
                     Err(err) => {
-                        error!("Error getting response: {}", err);
+                        _error!("Error getting response: {}", err);
                     }
                 };
             });
@@ -344,8 +342,8 @@ mod tests {
         }
 
         let success_cnt = responses.lock().await.len();
-        info!("Request total (with cached) success count : {}", success_cnt);
-        info!("Request real success count                : {}", *(success_real_cnt.lock().unwrap()));
+        _info!("Request total (with cached) success count : {}", success_cnt);
+        _info!("Request real success count                : {}", *(success_real_cnt.lock().unwrap()));
         assert!(success_cnt == request_cnt);
         assert!(*(success_real_cnt.lock().unwrap()) < success_cnt);
 
@@ -393,7 +391,7 @@ mod tests {
         let use_tls = false;
 
         // set client1 id
-        env::set_var(String::from(client::config::CONFIG_KEY_CLIENT_ID), "client1");
+        env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_ID), "client1");
 
         let client_exec = tokio::spawn(async move {
             client::serve(underlying_svc_address, underlying_repo, use_tls).await;
@@ -428,7 +426,7 @@ mod tests {
                         responses_clone.lock().await.push(res.text().await.unwrap());
                     },
                     Err(err) => {
-                        error!("Error getting response: {}", err);
+                        _error!("Error getting response: {}", err);
                     }
                 };
             });
@@ -453,7 +451,7 @@ mod tests {
         }
 
         let success_cnt = responses.lock().await.len();
-        info!("Request total success count : {}", success_cnt);
+        _info!("Request total success count : {}", success_cnt);
         assert!(success_cnt == request_cnt);
 
         // abort all services

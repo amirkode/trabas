@@ -65,7 +65,7 @@ For remote server deployment, minimal config as mentioned earlier is adequate fo
 ## Demo
 Here's the demo showing how the tunneling works using `Trabas`.
 
-[![Watch the video](https://jotling.liter8.sh/trabas-demo-v1-thumbnail)](https://jotling.liter8.sh/trabas-demo-v1?media=video)
+[![Watch the video](https://github.com/user-attachments/assets/47b7397b-45e8-47f5-9296-7f18998cda8e)](https://jotling.liter8.sh/trabas-demo-v1?media=video)
 
 ### Logs
 Soon

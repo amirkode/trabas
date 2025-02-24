@@ -9,6 +9,19 @@ use common::{_info, config::{init_env_from_config, keys::{CONFIG_KEY_GLOBAL_DEBU
 use trabas::{PROJECT_NAME, PROJECT_VERSION};
 use ctrlc;
 
+static LONG_ABOUT: Lazy<String> = Lazy::new(|| generate_help_text(""));
+
+fn generate_help_text(service_tag: &str) -> String {
+    let logo = create_logo(service_tag.to_string());
+    let mut help_text = String::new();
+    for line in logo {
+        help_text.push_str(&line);
+        help_text.push('\n');
+    }
+    help_text.push_str("A lightweight HTTP tunneling tool for securely exposing local services to the internet.");
+    help_text
+}
+
 // config arg keys for global
 const CONFIG_ARG_GLOBAL_SET_DEBUG: &str = "set-debug";
 const CONFIG_ARG_GLOBAL_UNSET_DEBUG: &str = "unset-debug";
@@ -23,11 +36,11 @@ const CONFIG_ARG_CL_SERVER_SIGNING_KEY: &str = "server-signing-key";
 // config arg keys for server
 const CONFIG_ARG_SV_GEN_KEY: &str = "gen-key";
 const CONFIG_ARG_SV_KEY: &str = "key";
+const CONFIG_ARG_SV_PUBLIC_ENDPOINT: &str = "public-endpoint";
 const CONFIG_ARG_SV_REDIS_ENABLE: &str = "redis-enable";
 const CONFIG_ARG_SV_REDIS_HOST: &str = "redis-host";
 const CONFIG_ARG_SV_REDIS_PORT: &str = "redis-port";
 const CONFIG_ARG_SV_REDIS_PASS: &str = "redis-pass";
-const CONFIG_ARG_SV_PUBLIC_ENDPOINT: &str = "public-endpoint";
 
 // config arg keys for server cache
 const CONFIG_ARG_SV_CACHE_CLIENT_ID: &str = "client-id";
@@ -39,7 +52,7 @@ const CONFIG_ARG_SV_CACHE_EXP_DURATION: &str = "exp-duration";
 #[derive(Parser)]
 #[command(name = "trabas")]
 #[command(version = PROJECT_VERSION, about = "A lightweight http tunneling tool")]
-#[command(long_about = "A lightweight HTTP tunneling tool for securely exposing local services to the internet.")]
+#[command(long_about = LONG_ABOUT.as_str())]
 struct Cli {
     #[command(subcommand)]
     command: Commands
@@ -55,12 +68,12 @@ enum Commands {
         #[arg(long)]
         log_limit: Option<usize>,
     },
-    Client {
-        #[command(subcommand)]
+     Client {
+        #[command(subcommand, long_help = CLIENT_HELP.as_str())]
         action: ClientActions,
     },
     Server {
-        #[command(subcommand)]
+        #[command(subcommand, long_help = SERVER_HELP.as_str())]
         action: ServerActions,
     },
     Version { }
@@ -146,6 +159,12 @@ enum ServerActions {
         )]
         key: Option<String>,
         #[arg(
+            name = CONFIG_ARG_SV_PUBLIC_ENDPOINT, 
+            long,
+            help="Public accessible endpoint"
+        )]
+        public_endpoint: Option<String>,
+        #[arg(
             name = CONFIG_ARG_SV_REDIS_ENABLE, 
             long,
             help="Whether the Redis is enabled"
@@ -169,12 +188,6 @@ enum ServerActions {
             help="Redis Pass for queueing"
         )]
         redis_pass: Option<String>,
-        #[arg(
-            name = CONFIG_ARG_SV_PUBLIC_ENDPOINT, 
-            long,
-            help="Public accessible endpoint"
-        )]
-        public_endpoint: Option<String>,
         #[arg(
             long, 
             help = "Force apply the config",
@@ -319,8 +332,14 @@ fn create_logo(service_tag: String) -> Vec<String> {
     let line4 = format!("{} {} {} {} {} {} {}", t[3], r[3], a[3], b[3], a[3], s[3], service_tag);
     let line5 = format!("{} {} {} {} {} {} v{} by Liter8.sh", t[4], r[4], a[4], b[4], a[4], s[4], PROJECT_VERSION);
 
-    vec![
-        "Running:".to_string(),
+    let mut res: Vec<String> = Vec::new();
+    if service_tag != "".to_string() {
+        res.push("Running:".to_string());
+    } else {
+        res.push("".to_string());
+    }
+
+    res.append(&mut vec![
         "".to_string(),
         line1,
         line2,
@@ -328,7 +347,9 @@ fn create_logo(service_tag: String) -> Vec<String> {
         line4,
         line5,
         "".to_string(),
-    ]
+    ]);
+
+    res
 }
 
 fn print_log_header(service_tag: String) {
@@ -485,7 +506,7 @@ async fn main() {
                     server::config::remove_cache_config((*client_id).clone(), (*method).clone(), (*path).clone()).await;
                 },
             },
-            ServerActions::SetConfig { gen_key, key, redis_enable, redis_host, redis_port, redis_pass, public_endpoint, force } => {
+            ServerActions::SetConfig { gen_key, key, public_endpoint, redis_enable, redis_host, redis_port, redis_pass, force } => {
                 cleanup_logger_state();
 
                 if gen_key.is_none() && 
@@ -500,11 +521,11 @@ async fn main() {
                         "At least one of the following arguments must be provided: --{}, --{}, --{}, --{}, --{}, --{} or --{}",
                         CONFIG_ARG_SV_GEN_KEY,
                         CONFIG_ARG_SV_KEY,
+                        CONFIG_ARG_SV_PUBLIC_ENDPOINT,
                         CONFIG_ARG_SV_REDIS_ENABLE,
                         CONFIG_ARG_SV_REDIS_HOST,
                         CONFIG_ARG_SV_REDIS_PORT,
-                        CONFIG_ARG_SV_REDIS_PASS,
-                        CONFIG_ARG_SV_PUBLIC_ENDPOINT
+                        CONFIG_ARG_SV_REDIS_PASS
                     );
 
                     cmd.error(

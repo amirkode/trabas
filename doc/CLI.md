@@ -25,6 +25,7 @@ Option | Type | Description |
 --- | --- | --- |
 `--set-debug` | None | Set environment as debug |
 `--unset-debug` | None | Set environment as non debug |
+`--log-limit` | Integer | Set the maximum number logs will be shown in the console |
 ### `trabas server`
 Manage server service.
 ### Sub commands
@@ -49,6 +50,7 @@ Option | Type | Description |
 --- | --- | --- |
 `--gen-key` | No value [Optional] | Generate server secret |
 `--key` | String [Optional] | Manual set server secret |
+`--public-endpoint` | String | A public endpoint host will be returned to the client |
 `--redis-enable` | String | Enable flag whether to use redis for temporary transfer store. The value is either `true` or `false` |
 `--redis-host` | String | Host for redis |
 `--redis-port` | String | Port for redis |

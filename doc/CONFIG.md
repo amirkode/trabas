@@ -11,6 +11,13 @@ foo@bar:~$ trabas server set-config --gen-key
 ```
 this will generate the secret for the first time. You may regenerate later using `--force` option.
 
+### **SV_PUBLIC_ENDPOINT**
+
+A public endpoint host will be returned to the client:
+```console
+foo@bar:~$ trabas server set-config --public-endpoint https://yourendpoint.com
+```
+
 ### **SV_CACHE_CONFIGS**
 
 Trabas provides a caching layer for a particular HTTP request. The cache is unique by **Client ID**, **Method**, **URI**, and **Body**. This is reliable when the request headers is insignificant to the result (Some ID spefic request by headers might not use this config).

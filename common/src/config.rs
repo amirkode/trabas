@@ -22,12 +22,12 @@ pub mod keys {
     pub const CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY: &str = "CL_SERVER_SIGNING_KEY";
     // server
     pub const CONFIG_KEY_SERVER_SECRET: &str = "SV_SECRET";
+    pub const CONFIG_KEY_SERVER_PUBLIC_ENDPOINT: &str = "SV_PUBLIC_ENDPOINT";
     pub const CONFIG_KEY_SERVER_CACHE_CONFIGS: &str = "SV_CACHE_CONFIGS";
     pub const CONFIG_KEY_SERVER_REDIS_ENABLE: &str = "SV_REDIS_ENABLE";
     pub const CONFIG_KEY_SERVER_REDIS_HOST: &str = "SV_REDIS_HOST";
     pub const CONFIG_KEY_SERVER_REDIS_PORT: &str = "SV_REDIS_PORT";
     pub const CONFIG_KEY_SERVER_REDIS_PASS: &str = "SV_REDIS_PASS";
-    pub const CONFIG_KEY_SERVER_PUBLIC_ENDPOINT: &str = "SV_PUBLIC_ENDPOINT";
 }
 
 // TODO: should we make a config interface for both client and server (?)

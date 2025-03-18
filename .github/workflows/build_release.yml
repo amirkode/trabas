@@ -9,7 +9,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Checkout Repository
@@ -49,4 +49,15 @@ jobs:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: target/release/trabas.exe
           asset_name: trabas-${{ env.VERSION }}-windows.exe
+          asset_content_type: application/octet-stream
+
+      - name: Upload Release Asset (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: target/release/trabas
+          asset_name: trabas-${{ env.VERSION }}-macos
           asset_content_type: application/octet-stream

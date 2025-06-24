@@ -11,13 +11,18 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 use common::config;
+use common::string;
 use common::data::dto::public_response::PublicResponse;
 use common::data::dto::tunnel_client::TunnelClient;
+
 use crate::service::client_service::ClientService;
 use crate::service::public_service::PublicService;
 
 pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientService, public_service: PublicService) -> () {
-    _info!("Pending connection.");
+    let tunnel_id = string::generate_rand_id(32);
+    
+    _info!("Pending tunnel [{}] connection.", tunnel_id.clone());
+
     let (read_stream, write_stream) = tokio::io::split(stream);
     let mut read_stream = TcpStreamTLS::from_tcp_read(read_stream);
     let mut write_stream = TcpStreamTLS::from_tcp_write(write_stream);
@@ -73,7 +78,7 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     let packet = prepare_packet(to_json_vec(&tunnel_ack));
     write_stream.write_all(&packet).await.unwrap();
 
-    let msg = format!("Client Registration Successful. client_id: {}, signature: {}", client_id, client.signature);
+    let msg = format!("Client Registration Successful. client_id: {}, signature: {}, tunnel_id: {}", client_id, client.signature, tunnel_id.clone());
     _info!("{}", msg);
 
     // sleep for 1.5 seconds to prevent race condition with healthcheck packet
@@ -97,12 +102,28 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     let client_id1 = client_id.clone();
     let client_id2 = client_id.clone();
 
+    // tunnel ids for each handler
+    let tunnel_id1 = tunnel_id;
+    let tunnel_id2 = tunnel_id1.clone();
+
     // spawn handlers
     tokio::spawn(async move {
-        tunnel_sender_handler(handler_stopped1, write_stream_arc, public_service_arc1, client_service_arc1, client_id1).await;
+        tunnel_sender_handler(
+            handler_stopped1, 
+            write_stream_arc, 
+            public_service_arc1,
+            client_service_arc1, 
+            client_id1, 
+            tunnel_id1).await;
     });
     tokio::spawn(async move {
-        tunnel_receiver_handler(handler_stopped2, read_stream_arc, public_service_arc2, client_service_arc2, client_id2).await;
+        tunnel_receiver_handler(
+            handler_stopped2, 
+            read_stream_arc, 
+            public_service_arc2, 
+            client_service_arc2, 
+            client_id2, 
+            tunnel_id2).await;
     });
 }
 
@@ -145,15 +166,17 @@ async fn tunnel_sender_handler(
     public_service: Arc<Mutex<PublicService>>, 
     client_service: Arc<Mutex<ClientService>>, 
     client_id: String,
+    tunnel_id: String,
 ) {
-    _info!("Tunnel sender handler started.");
+    _info!("Tunnel [{}] sender handler started.", tunnel_id.clone());
     
     let mut skip = 0;
     while !(*handler_stopped.lock().await) {
         // request from the queue
+        // TODO: implement Round-robin for multiple tunnels with a single client id
         match public_service.lock().await.dequeue_request(client_id.clone()).await {
             Ok(public_request) => {
-                _info!("Request was found: {}", public_request.id.clone());
+                _info!("Request [{}] was acquired by tunnel [{}]", public_request.id.clone(), tunnel_id.clone());
                 
                 // send request to client service
                 let bytes_req = prepare_packet(to_json_vec(&public_request.clone()));
@@ -169,7 +192,7 @@ async fn tunnel_sender_handler(
             },
             Err(_) => {
                 skip += 1;
-                // every 20k skips send health check
+                // every 20k skips and send health check
                 if skip == 20000 {
                     let hc = prepare_packet(Vec::from(String::from(HEALTH_CHECK_PACKET_ACK).as_bytes()));
                     if let Err(_) = stream.lock().await.write_all(&hc).await {
@@ -186,13 +209,13 @@ async fn tunnel_sender_handler(
     if !(*handler_stopped.lock().await) {
         // disconnect client
         client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
-        _info!("Client Disconnected. client_id: {}.", client_id);
+        _info!("Client Disconnected. client_id: {}, tunnel_id: {}.", client_id, tunnel_id.clone());
     }
 
     // update handler stop state
     (*handler_stopped.lock().await) = true;
 
-    _info!("Tunnel sender handler stopped.");
+    _info!("Tunnel [{}] sender handler stopped.", tunnel_id);
 }
 
 async fn tunnel_receiver_handler(
@@ -200,9 +223,10 @@ async fn tunnel_receiver_handler(
     stream: Arc<Mutex<TcpStreamTLS>>, 
     public_service: Arc<Mutex<PublicService>>, 
     client_service: Arc<Mutex<ClientService>>, 
-    client_id: String
+    client_id: String,
+    tunnel_id: String,
 ) {
-    _info!("Tunnel receiver handler started.");
+    _info!("Tunnel [{}] receiver handler started.", tunnel_id.clone());
 
     while !(*handler_stopped.lock().await) {
         // get latest response from stream
@@ -232,18 +256,18 @@ async fn tunnel_receiver_handler(
                 continue;
             }
 
-            _info!("Response received for request: {}.", response.request_id);
+            _info!("Response received by tunnel [{}] for request: {}.", tunnel_id.clone(), response.request_id);
         }
     }
 
     if !(*handler_stopped.lock().await) {
         // disconnect client
         client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
-        _info!("Client Disconnected. client_id: {}", client_id);
+        _info!("Client Disconnected. client_id: {}, tunnel_id: {}", client_id, tunnel_id.clone());
     }
 
     // update handler stop state
     (*handler_stopped.lock().await) = true;
 
-    _info!("Tunnel receiver handler stopped.");
+    _info!("Tunnel [{}] receiver handler stopped.", tunnel_id);
 }

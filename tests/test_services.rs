@@ -458,4 +458,90 @@ mod tests {
         server_exec.abort();
         client_exec.abort();
     }
+
+    #[tokio::test]
+    async fn test_e2e_request_flow_with_multiple_tunnels_with_single_client_id() {
+        // init mock env
+        init_test_env();
+
+        // start server service
+        let cache_repo = Arc::new(MockCacheRepo::new());
+        let client_repo = Arc::new(MockClientRepo::new());
+        let request_repo = Arc::new(MockRequestRepo::new());
+        let response_repo = Arc::new(MockResponseRepo::new());
+        let config_handler = Arc::new(MockConfigHandlerImpl::new());
+        let public_svc_address = String::from("127.0.0.1:3333");
+        let client_svc_address = String::from("127.0.0.1:3334");
+        let server_exec = tokio::spawn(async move {
+            server::run(
+                public_svc_address, 
+                client_svc_address, 
+                0, 
+                false, 
+                cache_repo, 
+                client_repo, 
+                request_repo, 
+                response_repo,
+                config_handler).await;
+        });
+
+        // delay for 2 seconds to wait the server to start up
+        sleep(Duration::from_secs(2)).await;
+
+        // start client service
+        let mock_response = String::from("pong");
+        let underlying_repo1 = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), Arc::new(StdMutex::new(|| {}))));
+        let underlying_repo2 = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), Arc::new(StdMutex::new(|| {}))));
+        let underlying_repo3 = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), Arc::new(StdMutex::new(|| {}))));
+        let use_tls = false;
+
+        // set client id
+        env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_ID), "shared_client_id");
+
+        // run 3 client tunnels
+        let client_tunnel1_exec = tokio::spawn(async move {
+            client::serve(String::from("The target underlying address, This has no effect"), underlying_repo1, use_tls).await;
+        });
+
+        // delay for 2 seconds to wait the client tunnel 1 to start up
+        sleep(Duration::from_secs(2)).await;
+
+        let client_tunnel2_exec = tokio::spawn(async move {
+            client::serve(String::from("The target underlying address, This has no effect"), underlying_repo2, use_tls).await;
+        });
+
+        // delay for 2 seconds to wait the client tunnel 2 to start up
+        sleep(Duration::from_secs(2)).await;
+
+        let client_tunnel3_exec = tokio::spawn(async move {
+            client::serve(String::from("The target underlying address, This has no effect"), underlying_repo3, use_tls).await;
+        });
+
+        // delay for 2 seconds to wait the client tunnel 3 to start up
+        sleep(Duration::from_secs(2)).await;
+
+        // test hit to server public service, 
+        // it should return the mock reponse client service
+        let url = String::from("http://127.0.0.1:3333/shared_client_id/ping");
+        // each client processes 10 requests
+        for _ in 0..10 {
+            let response = match send_http_request(url.clone(), None).await {
+                Ok(res) => res.text().await.unwrap(),
+                Err(err) => {
+                    println!("Error getting response: {}", err);
+                    err
+                }
+            };
+
+            assert_eq!(response, mock_response);
+        }
+
+        // abort all services
+        server_exec.abort();
+        client_tunnel1_exec.abort();
+        client_tunnel2_exec.abort();
+        client_tunnel3_exec.abort();
+
+        // TODO: add more relevant assertions
+    }
 }

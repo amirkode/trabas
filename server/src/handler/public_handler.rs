@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::{Cursor, Read};
 
 use chrono::Utc;
 use common::convert::{parse_request_bytes, request_to_bytes, modify_headers_of_response_bytes};
@@ -12,7 +11,6 @@ use common::net::{
 };
 use hex;
 use rand::{self, Rng};
-use multipart::server::Multipart;
 use sha2::{Sha256, Digest};
 use http::{Request, StatusCode, Uri};
 use tokio::net::TcpStream;
@@ -224,32 +222,26 @@ fn normalize_response_headers(res: Vec<u8>, to_cache_client_id: Option<String>) 
 fn get_unique_body_as_bytes(req: Request<Vec<u8>>) -> Vec<u8> {
     // Clean body boundary if exists, usually for multipart body
     if let Some(content_type) = req.headers().get("Content-Type") {
-        let content_type_str = content_type.to_str().unwrap();
-        if let Some(boundary) = content_type_str.split("boundary=").nth(1) {
-            // let boundary = format!("--{}", boundary);
-            let mut multipart = Multipart::with_body(Cursor::new(req.body().to_owned()), boundary);
-
-            // reformat data
-            let mut cleaned_body: Vec<String> = Vec::new();
-            // while let Some(mut field) = multipart.read_entry().unwrap()
-            while let Ok(Some(mut field)) = multipart.read_entry() {
-                let field_name = field.headers.name.to_string();
-                let mut field_data = String::new();
-                let content_type = field.headers.content_type.clone();
-
-                if let Ok(_) = field.data.read_to_string(&mut field_data) {
-                    // return the cleaned body
-                    cleaned_body.push(format!("Content-Type: {:?}, Field: {:?}, Text Data: {:?}", content_type, field_name, field_data));
-                } else {
-                    let mut buffer = vec![];
-                    field.data.read_to_end(&mut buffer).unwrap();
-                    cleaned_body.push(format!("Content-Type: {:?}, Field: {:?}, Binary Data: {:?}", content_type, field_name, buffer));
-                }
+        let content_type_str = content_type.to_str().unwrap_or("");
+        if content_type_str.contains("multipart/") {
+            if let Some(boundary) = content_type_str.split("boundary=").nth(1) {
+                // for simplicity, we'll just remove the boundary strings from the body
+                // without parsing the multipart content
+                // fixing depencency issue with `multipart` crate
+                let body = req.body();
+                let boundary_marker = format!("--{}", boundary.trim_matches('"'));
+                let body_str = String::from_utf8_lossy(body);
+                
+                // remove boundary markers and normalize the content
+                let cleaned = body_str
+                    .lines()
+                    .filter(|line| !line.starts_with(&boundary_marker))
+                    .filter(|line| !line.trim().is_empty())
+                    .collect::<Vec<&str>>()
+                    .join("\n");
+                
+                return cleaned.into_bytes();
             }
-
-            return cleaned_body.into_iter()
-                .flat_map(|s| s.into_bytes())
-                .collect()
         }
     }
 
@@ -323,7 +315,7 @@ fn generate_request_id(client_id: String) -> String {
     let timestamp = Utc::now().timestamp_nanos_opt().unwrap_or(0);
     // add randomness
     let mut rng = rand::rng();
-    let random_suffix: Vec<u8> = (0..10).map(|_| rng.gen()).collect();
+    let random_suffix: Vec<u8> = (0..10).map(|_| rng.random()).collect();
     // concatenate client_id, timestamp, and random value
     let input = format!("{}{}{:?}", client_id, timestamp, random_suffix);
     // hash the value with a SHA-256 hasher

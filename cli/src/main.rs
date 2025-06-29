@@ -451,7 +451,6 @@ async fn main() {
         Commands::Client { action } => match action {
             ClientActions::Serve { host, port , tls } => {
                 print_log_header(SERVICE_TAG_CLIENT.to_string());
-                // client::entry_point((*host).clone(), *port, *tls).await;
                 client::entry_point(
                     client::config::ClientRequestConfig::new(
                         (*host).clone(),

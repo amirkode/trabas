@@ -68,6 +68,13 @@ Here's the demo showing how the tunneling works using `Trabas`.
 [![Watch the video](https://github.com/user-attachments/assets/47b7397b-45e8-47f5-9296-7f18998cda8e)](https://jotling.liter8.sh/trabas-demo-v1?media=video)
 
 ## Change Logs
+### **v0.1.1** <sub><sup>(2025-06-29)</sup></sub>
+- Support `trabas_client_id` via query params.
+- Add tunnel ID to sessions and responses (Optional).
+- Improve logging and internal structure.
+- Add macOS to CI.
+- Fix path logging and remove broken `multipart` dep.
+
 ### **v0.1.0** <sub><sup>(2025-02-24)</sup></sub>
 - Initial release with basic HTTP tunneling.
 - Implemented server and client services.

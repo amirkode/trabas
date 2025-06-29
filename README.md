@@ -54,7 +54,7 @@ this starts the public request and client service listeners.
 
 **User Access**
 
-Once the server and client are connected, by default, the user can access your underlying service on `serverhost:8001/[client id]` (you might proxify the server to hide the actual port). But, you also directly access it on `serverhost:8001` with `trabas_client_id` cookie header sent by the client and you need to enable this feature by an additional `--cache-client-id` flag on server service.
+Once the server and client are connected, by default, the user can access your underlying service on `serverhost:8001/[client id]` (prefix path) or `serverhost:8001/?trabas_client_id=[client id]` (query param). But, you also directly access it on `serverhost:8001` with `trabas_client_id` cookie header sent by the client and you need to enable this feature by an additional `--cache-client-id` flag on server service (you might proxify the server to hide the actual port).
 
 **Note** that the public endpoint will also be returned by the server once a connection successfully established.
 
@@ -68,6 +68,13 @@ Here's the demo showing how the tunneling works using `Trabas`.
 [![Watch the video](https://github.com/user-attachments/assets/47b7397b-45e8-47f5-9296-7f18998cda8e)](https://jotling.liter8.sh/trabas-demo-v1?media=video)
 
 ## Change Logs
+### **v0.1.1** <sub><sup>(2025-06-29)</sup></sub>
+- Support `trabas_client_id` via query params.
+- Add tunnel ID to sessions and responses (Optional).
+- Improve logging and internal structure.
+- Add macOS to CI.
+- Fix path logging and remove broken `multipart` dep.
+
 ### **v0.1.0** <sub><sup>(2025-02-24)</sup></sub>
 - Initial release with basic HTTP tunneling.
 - Implemented server and client services.

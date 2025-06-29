@@ -32,11 +32,13 @@ mod tests {
     fn test_modify_headers_of_response_bytes() {
         let response_bytes = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 21\r\n\r\n{\"key\": \"value\"}";
         let headers_to_remove = vec!["Content-Type".to_string()];
-        let cookies_to_set: HashMap<String, String> = HashMap::new();
+        let headers_to_set = HashMap::new();
+        let cookies_to_set= HashMap::new();
         let update_content_length = true;
         let modified_bytes = modify_headers_of_response_bytes(
             response_bytes,
             headers_to_remove,
+            headers_to_set,
             cookies_to_set,
             update_content_length,
         );

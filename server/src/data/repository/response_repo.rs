@@ -29,7 +29,7 @@ impl ResponseRepo for ResponsRepoRedisImpl {
     async fn set(&self, client_id: String, response: PublicResponse) -> Result<(), String> {
         let key = format!("{}_{}", REDIS_KEY_PUBLIC_RESPONSE, client_id);
         let data = to_json_vec(&response);
-        self.connection.clone().hset(key, response.request_id.clone(), data).await
+        self.connection.clone().hset::<_, _, _, ()>(key, response.request_id.clone(), data).await
             .map_err(|e| format!("Error setting response {}: {}", response.request_id, e))?;
         Ok(())
     }
@@ -44,7 +44,7 @@ impl ResponseRepo for ResponsRepoRedisImpl {
 
         let res: PublicResponse = from_json_slice(&data).unwrap();
         // delete data
-        self.connection.clone().hdel(key, request_id.clone()).await
+        self.connection.clone().hdel::<_, _, ()>(key, request_id.clone()).await
             .map_err(|e| format!("Error deleting {}: {}", request_id, e))?;
         Ok(res)
     }

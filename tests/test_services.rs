@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, env, sync::Arc, time::Duration};
+    use std::{collections::{HashMap, HashSet}, env, sync::Arc, time::Duration};
 
     use common::{_error, _info};
     use common::config::keys as config_keys;
@@ -79,14 +79,16 @@ mod tests {
         let request_repo = Arc::new(MockRequestRepo::new());
         let response_repo = Arc::new(MockResponseRepo::new());
         let config_handler = Arc::new(MockConfigHandlerImpl::new());
-        let public_svc_address = String::from("127.0.0.1:3333");
-        let client_svc_address = String::from("127.0.0.1:3334");
         let server_exec = tokio::spawn(async move {
             server::run(
-                public_svc_address, 
-                client_svc_address, 
-                0, 
-                false, 
+                server::config::ServerRequestConfig::new(
+                    "127.0.0.1".to_string(),
+                    3333, 
+                    3334, 
+                    0, // no request limit
+                    false, // no cache client id
+                    false
+                ),
                 cache_repo, 
                 client_repo, 
                 request_repo, 
@@ -136,9 +138,13 @@ mod tests {
         // test hit to server public service, 
         // it should return the mock reponse client service
         for i in 1..=3 {
-            let url = String::from(format!("http://127.0.0.1:3333/client{}/ping", i));
             // each client processes 10 requests
             for _ in 0..10 {
+                let url = if i % 2 == 0 { 
+                    format!("http://127.0.0.1:3333/client{}/ping?ha=hu&hu=ha", i)
+                } else {
+                    format!("http://127.0.0.1:3333/ping?trabas_client_id=client{}&ha=hu&hu=ha", i)
+                };
                 let response = match send_http_request(url.clone(), None).await {
                     Ok(res) => res.text().await.unwrap(),
                     Err(err) => {
@@ -170,14 +176,16 @@ mod tests {
         let request_repo = Arc::new(MockRequestRepo::new());
         let response_repo = Arc::new(MockResponseRepo::new());
         let config_handler = Arc::new(MockConfigHandlerImpl::new());
-        let public_svc_address = String::from("127.0.0.1:3333");
-        let client_svc_address = String::from("127.0.0.1:3334");
         let server_exec = tokio::spawn(async move {
             server::run(
-                public_svc_address, 
-                client_svc_address, 
-                request_limit, 
-                false, 
+                server::config::ServerRequestConfig::new(
+                    "127.0.0.1".to_string(),
+                    3333, 
+                    3334, 
+                    request_limit,
+                    false,
+                    false
+                ), 
                 cache_repo, 
                 client_repo, 
                 request_repo, 
@@ -210,10 +218,14 @@ mod tests {
         let mut handles: Vec<JoinHandle<()>> = Vec::new();
         let responses = Arc::new(Mutex::new(Vec::<String>::new()));
         // it should return the mock reponse client service
-        for _ in 0..request_cnt {
+        for i in 0..request_cnt {
             let responses_clone = Arc::clone(&responses);
             let handle = task::spawn(async move {
-                let url = String::from("http://127.0.0.1:3333/client1/ping");
+                let url = if i % 2 == 0 { 
+                    String::from("http://127.0.0.1:3333/client1/ping")
+                } else {
+                    String::from("http://127.0.0.1:3333/ping?trabas_client_id=client1")
+                };
                 match send_http_request(url, None).await {
                     Ok(res) => {
                         responses_clone.lock().await.push(res.text().await.unwrap());
@@ -257,14 +269,16 @@ mod tests {
         let config_handler = Arc::new(MockConfigHandlerImpl::new());
         let cache_service = CacheService::new(
             cache_repo.clone(), config_handler.clone(), String::from(config_keys::CONFIG_KEY_SERVER_CACHE_CONFIGS));
-        let public_svc_address = String::from("127.0.0.1:3333");
-        let client_svc_address = String::from("127.0.0.1:3334");
         let server_exec = tokio::spawn(async move {
             server::run(
-                public_svc_address, 
-                client_svc_address, 
-                0, 
-                false, 
+                server::config::ServerRequestConfig::new(
+                    "127.0.0.1".to_string(),
+                    3333, 
+                    3334, 
+                    0,
+                    false,
+                    false
+                ), 
                 cache_repo, 
                 client_repo, 
                 request_repo, 
@@ -311,7 +325,11 @@ mod tests {
         for i in 0..request_cnt {
             let responses_clone = Arc::clone(&responses);
             let handle = task::spawn(async move {
-                let url = String::from("http://127.0.0.1:3333/client1/ping");
+                let url = if i % 2 == 0 { 
+                    String::from("http://127.0.0.1:3333/client1/ping")
+                } else {
+                    String::from("http://127.0.0.1:3333/ping?trabas_client_id=client1")
+                };
                 match send_http_request(url, None).await {
                     Ok(res) => {
                         responses_clone.lock().await.push(res.text().await.unwrap());
@@ -363,16 +381,18 @@ mod tests {
         let request_repo = Arc::new(MockRequestRepo::new());
         let response_repo = Arc::new(MockResponseRepo::new());
         let config_handler = Arc::new(MockConfigHandlerImpl::new());
-        let public_svc_address = String::from("127.0.0.1:3333");
-        let client_svc_address = String::from("127.0.0.1:3334");
         let server_exec = tokio::spawn(async move {
             // enable the client id cache
             let cache_client_id = true;
             server::run(
-                public_svc_address, 
-                client_svc_address, 
-                0, 
-                cache_client_id, 
+                server::config::ServerRequestConfig::new(
+                    "127.0.0.1".to_string(),
+                    3333, 
+                    3334, 
+                    0,
+                    cache_client_id,
+                    false
+                ), 
                 cache_repo, 
                 client_repo, 
                 request_repo, 
@@ -470,14 +490,16 @@ mod tests {
         let request_repo = Arc::new(MockRequestRepo::new());
         let response_repo = Arc::new(MockResponseRepo::new());
         let config_handler = Arc::new(MockConfigHandlerImpl::new());
-        let public_svc_address = String::from("127.0.0.1:3333");
-        let client_svc_address = String::from("127.0.0.1:3334");
         let server_exec = tokio::spawn(async move {
             server::run(
-                public_svc_address, 
-                client_svc_address, 
-                0, 
-                false, 
+                server::config::ServerRequestConfig::new(
+                    "127.0.0.1".to_string(),
+                    3333, 
+                    3334, 
+                    0,
+                    false,
+                    true
+                ), 
                 cache_repo, 
                 client_repo, 
                 request_repo, 
@@ -523,10 +545,19 @@ mod tests {
         // test hit to server public service, 
         // it should return the mock reponse client service
         let url = String::from("http://127.0.0.1:3333/shared_client_id/ping");
-        // each client processes 10 requests
-        for _ in 0..10 {
+        // disptach 20 requests
+        let mut tunnel_ids: HashSet<String> = HashSet::new();
+        for _ in 0..20 {
             let response = match send_http_request(url.clone(), None).await {
-                Ok(res) => res.text().await.unwrap(),
+                Ok(res) => {
+                    let tunnel_id = res.headers().get("trabas_tunnel_id")
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or_default();
+                    if !tunnel_id.is_empty() {
+                        tunnel_ids.insert(tunnel_id.to_string());
+                    }
+                    res.text().await.unwrap()
+                },
                 Err(err) => {
                     println!("Error getting response: {}", err);
                     err
@@ -535,6 +566,10 @@ mod tests {
 
             assert_eq!(response, mock_response);
         }
+
+        _info!("Tunnel IDs: {:?}", tunnel_ids);
+
+        assert_eq!(tunnel_ids.len(), 3);
 
         // abort all services
         server_exec.abort();

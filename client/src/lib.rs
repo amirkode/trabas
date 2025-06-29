@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use common::_info;
-use config::validate_configs;
+use config::{ClientRequestConfig, validate_configs};
 use data::repository::underlying_repo::{UnderlyingRepo, UnderlyingRepoImpl};
 use handler::main_handler::register_handler;
 use service::underlying_service::UnderlyingService;
@@ -12,19 +12,19 @@ pub mod handler;
 pub mod service;
 
 // TODO: too many parameters, bind it in a data struct
-pub async fn entry_point(host: Option<String>, port: u16, use_tls: bool) {
+pub async fn entry_point(config: ClientRequestConfig) {
     validate_configs();
     
-    let underlying_svc_address = match host {
-        Some(h) => format!("{}:{}", h, port),
-        None => format!("127.0.0.1:{}", port)
+    let underlying_svc_address = match config.host {
+        Some(h) => format!("{}:{}", h, config.port),
+        None => format!("127.0.0.1:{}", config.port)
     };    
     
     // init repo to be injected
     let underlying_repo = Arc::new(UnderlyingRepoImpl::new());
     
     // run the service
-    serve(underlying_svc_address, underlying_repo, use_tls).await;
+    serve(underlying_svc_address, underlying_repo, config.use_tls).await;
 }
 
 pub async fn serve(

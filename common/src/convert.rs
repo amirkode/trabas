@@ -70,6 +70,7 @@ pub fn request_to_bytes(request: &Request<Vec<u8>>) -> Vec<u8> {
 pub fn modify_headers_of_response_bytes(
     response_bytes: &[u8],
     mut headers_to_remove: Vec<String>,
+    headers_to_set: HashMap<String, String>,
     cookies_to_set: HashMap<String, String>,
     update_content_length: bool,
 ) -> Vec<u8> {
@@ -97,7 +98,12 @@ pub fn modify_headers_of_response_bytes(
                 response_builder = response_builder.header(header.name, header.value);
             }
 
-            // set cookies
+            // set additional headers
+            for (key, value) in headers_to_set {
+                response_builder = response_builder.header(key, value);
+            }
+
+            // set additional cookies
             if !cookies_to_set.is_empty() {
                 for (key, value) in cookies_to_set {
                     let cookie_header = format!("{}={}; Path=/; HttpOnly", key, value);

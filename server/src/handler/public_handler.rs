@@ -16,23 +16,31 @@ use http::{Request, StatusCode, Uri};
 use tokio::net::TcpStream;
 use common::data::dto::public_request::PublicRequest;
 use common::{_info, _error};
+use common::config::keys as config_keys;
 use crate::service::cache_service::CacheService;
 use crate::service::client_service::ClientService;
 use crate::service::public_service::PublicService;
 
 const CLIENT_ID_COOKIE_KEY: &str = "trabas_client_id";
+const TUNNEL_ID_HEADER_KEY: &str = "trabas_tunnel_id";
 
 pub async fn register_public_handler(
     stream: TcpStream, 
     client_service: ClientService, 
     public_service: PublicService, 
     cache_service: CacheService, 
-    cache_client_id: bool
+    cache_client_id: bool,
+    return_tunnel_id: bool
 ) {
     tokio::spawn(async move {
         let (read_stream, write_stream) = tokio::io::split(stream);
-        public_handler(TcpStreamTLS::from_tcp(
-            read_stream, write_stream), client_service, public_service, cache_service, cache_client_id).await;
+        public_handler(
+            TcpStreamTLS::from_tcp(read_stream, write_stream), 
+            client_service, 
+            public_service, 
+            cache_service, 
+            cache_client_id, 
+            return_tunnel_id).await;
     });
 }
 
@@ -43,7 +51,8 @@ async fn public_handler(
     client_service: ClientService, 
     public_service: PublicService, 
     cache_service: CacheService,
-    cache_client_id: bool
+    cache_client_id: bool,
+    return_tunenl_id: bool
 ) -> () {
     // read data as bytes
     let mut raw_request = Vec::new();
@@ -169,7 +178,10 @@ async fn public_handler(
     _info!("Public Request: {} was enqueued.", request_id.clone());
     
     // wait for response
-    let timeout = 60u64; // time out in 60 seconds
+    let timeout = std::env::var(config_keys::CONFIG_KEY_SERVER_PUBLIC_REQUEST_TIMEOUT)
+        .ok()
+        .and_then(|val| val.parse::<u64>().ok())
+        .unwrap_or(60); // default timeout is 60 seconds
     let res = match public_service.get_response(client_id.clone(), request_id.clone(), timeout).await {
         Ok(value) => value,
         Err(msg) => {
@@ -183,10 +195,11 @@ async fn public_handler(
     };
 
     // normalize headers
-    let res = normalize_response_headers(res.data, match cache_client_id {
-        true => Some(client_id.clone()),
-        false => None
-    });
+    let res = normalize_response_headers(
+        res.data, 
+        if cache_client_id { Some(client_id.clone()) } else { None },
+        if return_tunenl_id { Some(res.tunnel_id) } else { None }
+    );
 
     // write cache
     match cache_config {
@@ -204,17 +217,22 @@ async fn public_handler(
     stream.write_all(&res).await.unwrap();
 }
 
-fn normalize_response_headers(res: Vec<u8>, to_cache_client_id: Option<String>) -> Vec<u8> {
-    let headers_to_set = vec![
+fn normalize_response_headers(res: Vec<u8>, to_cache_client_id: Option<String>, to_return_tunnel_id: Option<String>) -> Vec<u8> {
+    let headers_to_remove = vec![
         "Transfer-Encoding".to_string(),
         "Content-Length".to_string()
     ];
-    let cookies_to_set = match to_cache_client_id {
-        Some(client_id) => HashMap::from([(CLIENT_ID_COOKIE_KEY.to_string(), client_id)]),
-        None => HashMap::new()
-    };
+    let mut headers_to_set = HashMap::new();
+    if let Some(tunnel_id) = to_return_tunnel_id {
+        headers_to_set.insert(TUNNEL_ID_HEADER_KEY.to_string(), tunnel_id);
+    }
+
+    let mut cookies_to_set = HashMap::new();
+    if let Some(client_id) = to_cache_client_id {
+        cookies_to_set.insert(CLIENT_ID_COOKIE_KEY.to_string(), client_id);
+    }
     
-    return modify_headers_of_response_bytes(&res, headers_to_set, cookies_to_set, true);
+    return modify_headers_of_response_bytes(&res, headers_to_remove, headers_to_set, cookies_to_set, true);
 }
 
 // this returns unique bytes representation of body with cleaned insignificant part such "boundary"
@@ -249,12 +267,15 @@ fn get_unique_body_as_bytes(req: Request<Vec<u8>>) -> Vec<u8> {
 }
 
 // get client id from request path
-// the rules of this tunneling tool is always prepend path with client_id
+// the rules of this tunneling tool is always rely on the client id
+// it must be provided in the request path (as prefix) or as a query parameter.
 // suppose:
 // client id: client_12345
-// actual path: /api/v1/ping
-// so, the accessible path from public:
-// /[client id]/[actual path] -> /client_12345/api/v1/ping
+// target path: /api/v1/ping
+// A. Prefix path with client id:
+//    - the accessible path from public: /[client id]/[actual path] -> /client_12345/api/v1/ping
+// B. Pass client id as query parameter:
+//    - the accessible path from public: /api/v1/ping?trabas_client_id=client_12345
 // TODO: add client connection validation and retrier until a certain count
 fn get_client_id<T>(mut request: Request<T>, cache_client_id: bool) -> Result<(Request<T>, String, String), String> {
     let cached_client = match cache_client_id {
@@ -263,43 +284,61 @@ fn get_client_id<T>(mut request: Request<T>, cache_client_id: bool) -> Result<(R
     };
     let uri = request.uri().clone();
     let mut path = uri.path().to_string();
-    let path = if path.starts_with('/') {
-        path.remove(0);
-        path
-    } else {
-        path.to_string()
-    };
-    let path_split: Vec<String> = path.split('/').map(|word| word.to_owned()).collect();
-    // get first path as client id
-    let client_id = path_split[0].clone();
-    if client_id.is_empty() {
-        // check whether client id found in the cache/cookie
-        // if exists, then we should not be worry about the client id
-        if let Some(cached_client_id) = cached_client {
-            return  Ok((request, cached_client_id, "/".to_string()));
-        }
-
-        return Err(String::from("Client ID cannot be empty or invalid."))
-    }
-
-    if let Some(cached_client_id) = cached_client {
-        // if cached client id is not equal to first path of the request
-        // it's most likely the client relies on the cached client id
-        if cached_client_id != client_id {
-            return  Ok((request, cached_client_id, "/".to_string()));
+    let mut query = uri.query().unwrap_or("").to_string();
+    
+    // check client id from request params
+    let mut client_id = query.split('&')
+        .find(|param| param.starts_with(CLIENT_ID_COOKIE_KEY))
+        .and_then(|param| param.split('=').nth(1))
+        .map(|id| id.to_string());
+    let check_prefix = client_id.is_none();
+    if check_prefix {
+        // fallback to prefix path
+        let mut check_path = path.clone();
+        check_path = if check_path.starts_with('/') {
+            check_path.remove(0);
+            check_path
+        } else {
+            check_path.to_string()
+        };
+        let path_split: Vec<String> = check_path.split('/').map(|word| word.to_owned()).collect();
+        // get first path as client id
+        let check_client_id = path_split[0].clone();
+        if !check_client_id.is_empty() {
+            client_id = Some(check_client_id);
         }
     }
 
-    // remove first path from the split
-    let new_path = format!("/{}", (&path_split[1..]).join("/"));
-    // update query
+    let client_id = client_id.unwrap_or_default().to_string();
+    let cached_client_id = cached_client.unwrap_or_default().trim().to_string();;
+    if client_id.is_empty() && cached_client_id.is_empty() {
+        // there's no way to identify the client
+        return Err(String::from("Client ID cannot be empty or invalid."));
+    }
+
+    // check whether we rely on cached_client_id with conditions
+    // - client_id is empty
+    // - client_id is same as cached_client_id
+    // - or client_id is not provided explicitly in the query params (i.e. no `trabas_client_id` in the query)
+    // then, let the path be as is
+    if client_id.is_empty() || (!cached_client_id.is_empty() && (client_id != cached_client_id || check_prefix)) {
+        return Ok((request, cached_client_id, path));
+    }
+
+    // remove related client_id prefix path or query from the request
     let mut parts = uri.into_parts();
-    let new_path_and_query = match parts.path_and_query {
-        Some(pq) => {
-            let query = pq.query().map(|q| format!("?{}", q)).unwrap_or_default();
-            Some(format!("{}{}", new_path, query).parse().unwrap())
-        },
-        None => Some(new_path.parse().unwrap()),
+    let new_path_and_query = if check_prefix {
+        // remove client id from path
+        let path_split: Vec<String> = path.split('/').map(|word| word.to_owned()).collect();
+        path = format!("/{}", (&path_split[2..]).join("/"));
+        Some(format!("{}{}", path, if query.is_empty() { query } else { format!("?{}", query)}).parse().unwrap())
+    } else {
+        // just update the query
+        query = query.split('&')
+            .filter(|param| !param.starts_with(CLIENT_ID_COOKIE_KEY))
+            .collect::<Vec<&str>>()
+            .join("&");
+        Some(format!("{}{}", path, if query.is_empty() { query } else { format!("?{}", query)}).parse().unwrap())
     };
     parts.path_and_query = new_path_and_query;
 
@@ -307,7 +346,7 @@ fn get_client_id<T>(mut request: Request<T>, cache_client_id: bool) -> Result<(R
     let new_uri = Uri::from_parts(parts).unwrap();
     *request.uri_mut() = new_uri;
 
-    Ok((request, client_id, new_path))
+    Ok((request, client_id, path))
 }
 
 fn generate_request_id(client_id: String) -> String {

@@ -11,6 +11,45 @@ use crate::{
     service::cache_service::CacheService
 };
 
+#[derive(Debug, Clone)]
+pub struct ServerRequestConfig {
+    pub host: String, 
+    pub public_port: u16, 
+    pub client_port: u16,
+    pub client_request_limit: u16,
+    pub cache_client_id: bool,
+    pub return_tunnel_id: bool
+}
+
+impl ServerRequestConfig {
+    pub fn new(
+        host: String, 
+        public_port: u16, 
+        client_port: u16, 
+        client_request_limit: u16, 
+        cache_client_id: bool,
+        return_tunnel_id: bool
+    ) -> Self {
+        ServerRequestConfig {
+            host,
+            public_port,
+            client_port,
+            client_request_limit,
+            cache_client_id,
+            return_tunnel_id
+        }
+    }
+
+    pub fn public_svc_address(&self) -> String {
+        format!("{}:{}", self.host, self.public_port)
+    }
+
+    pub fn client_svc_address(&self) -> String {
+        format!("{}:{}", self.host, self.client_port)
+    }
+}
+
+
 // simple validation for config keys
 pub fn validate_configs() -> HashMap<String, String> {
     let config = get_configs_from_proc_env();
@@ -65,68 +104,55 @@ pub fn set_server_configs(
     redis_port: Option<String>,
     redis_pass: Option<String>,
     public_endpoint: Option<String>,
-    force: bool) -> () {
+    public_request_timeout: Option<String>,
+    force: bool,
+) -> () {
     let config = get_configs_from_proc_env();
     let mut config_to_set = HashMap::new();
 
-    if let Some(e) = redis_enable {
-        if config.contains_key(keys::CONFIG_KEY_SERVER_REDIS_ENABLE) && !force {
-            println!("Redis enable flag is already set, please check it in the config file. Consider using --force option to force resetting");
-            return;
+    #[derive(PartialEq, Copy, Clone)]
+    enum ValueType { Int }
+    let key_types: HashMap<&str, ValueType> = [
+        (keys::CONFIG_KEY_SERVER_REDIS_PORT, ValueType::Int),
+        (keys::CONFIG_KEY_SERVER_PUBLIC_REQUEST_TIMEOUT, ValueType::Int),
+        // TODO: add more types as needed
+    ].iter().map(|(k, v)| (*k, *v)).collect();
+
+    let config_options = [
+        (redis_enable, keys::CONFIG_KEY_SERVER_REDIS_ENABLE, "Redis enable flag"),
+        (key, keys::CONFIG_KEY_SERVER_SECRET, "Server secret"),
+        (redis_host, keys::CONFIG_KEY_SERVER_REDIS_HOST, "Redis Host"),
+        (redis_port, keys::CONFIG_KEY_SERVER_REDIS_PORT, "Redis Port"),
+        (redis_pass, keys::CONFIG_KEY_SERVER_REDIS_PASS, "Redis Pass"),
+        (public_endpoint, keys::CONFIG_KEY_SERVER_PUBLIC_ENDPOINT, "Public Endpoint"),
+        (public_request_timeout, keys::CONFIG_KEY_SERVER_PUBLIC_REQUEST_TIMEOUT, "Public Request Timeout"),
+    ];
+
+    for (opt, key_str, msg) in config_options.iter() {
+        if let Some(val) = opt {
+            // validate the type
+            match key_types.get(key_str) {
+                Some(ValueType::Int) => {
+                    if val.parse::<u32>().is_err() {
+                        println!("{msg} must be an integer value.");
+                        return;
+                    }
+                }
+                // TODO: might add boolean
+                _ => {}
+            }
+            if config.contains_key(*key_str) && !force {
+                println!("{msg} is already set, please check it in the config file. Consider using --force option to force resetting");
+                return;
+            }
+            config_to_set.insert(String::from(*key_str), val.clone());
         }
-
-        config_to_set.insert(String::from(keys::CONFIG_KEY_SERVER_REDIS_ENABLE), e);
-    }
-    
-    if let Some(k) = key {
-        if config.contains_key(keys::CONFIG_KEY_SERVER_SECRET) && !force {
-            println!("Server secret is already set, please check it in the config file. Consider using --force option to force resetting");
-            return;
-        }
-
-        config_to_set.insert(String::from(keys::CONFIG_KEY_SERVER_SECRET), k);
-    }
-
-    if let Some(h) = redis_host {
-        if config.contains_key(keys::CONFIG_KEY_SERVER_REDIS_HOST) && !force {
-            println!("Redis Host is already set, please check it in the config file. Consider using --force option to force resetting");
-            return;
-        }
-
-        config_to_set.insert(String::from(keys::CONFIG_KEY_SERVER_REDIS_HOST), h);
-    }
-
-    if let Some(p) = redis_port {
-        if config.contains_key(keys::CONFIG_KEY_SERVER_REDIS_PORT) && !force {
-            println!("Redis Port is already set, please check it in the config file. Consider using --force option to force resetting");
-            return;
-        }
-
-        config_to_set.insert(String::from(keys::CONFIG_KEY_SERVER_REDIS_PORT), p);
-    }
-
-    if let Some(ps) = redis_pass {
-        if config.contains_key(keys::CONFIG_KEY_SERVER_REDIS_PASS) && !force {
-            println!("Redis Pass is already set, please check it in the config file. Consider using --force option to force resetting");
-            return;
-        }
-
-        config_to_set.insert(String::from(keys::CONFIG_KEY_SERVER_REDIS_PASS), ps);
-    }
-
-    if let Some(pe) = public_endpoint {
-        if config.contains_key(keys::CONFIG_KEY_SERVER_PUBLIC_ENDPOINT) && !force {
-            println!("Public Endpoint is already set, please check it in the config file. Consider using --force option to force resetting");
-            return;
-        }
-
-        config_to_set.insert(String::from(keys::CONFIG_KEY_SERVER_PUBLIC_ENDPOINT), pe);
     }
 
     set_configs(config_to_set);
 
-    println!("Server Configurations has been set!");
-    println!("You may find the value later again in the config file"); 
+    println!("Server Configurations have been set!");
+    println!("You may find the value later again in the config file");
 }
 
 // Cache Configs

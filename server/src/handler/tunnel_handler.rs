@@ -46,7 +46,7 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     let client: TunnelClient = match from_json_slice(&raw_response) {
         Some(value) => value,
         None => {
-            let tunnel_ack = TunnelAck::new(false, format!("Invalid request"), vec![]);
+            let tunnel_ack = TunnelAck::new(tunnel_id, false, format!("Invalid request"), vec![]);
             let packet = prepare_packet(to_json_vec(&tunnel_ack));
             write_stream.write_all(&packet).await.unwrap();
             _error!("{}", tunnel_ack.message);
@@ -57,6 +57,7 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     // validate connection before registering client
     if !validate_connection(client.signature.clone(), client.id.clone()) {
         let tunnel_ack = TunnelAck::new(
+            tunnel_id,
             false, 
             format!("Client Registration Denied. client_id: {}, signature: {}", client_id, client.signature), 
             vec![]);
@@ -72,6 +73,7 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     let endpoint_prefix = std::env::var(config::keys::CONFIG_KEY_SERVER_PUBLIC_ENDPOINT).unwrap_or_default();
     let public_endpoints = vec![append_path_to_url(&endpoint_prefix, &client.id), append_path_to_url(&endpoint_prefix, &client.alias_id)];
     let tunnel_ack = TunnelAck::new(
+        tunnel_id.clone(),
         true, 
         format!("ok"), 
         public_endpoints);

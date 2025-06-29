@@ -18,6 +18,12 @@ A public endpoint host will be returned to the client:
 foo@bar:~$ trabas server set-config --public-endpoint https://yourendpoint.com
 ```
 
+## **SV_PUBLIC_REQUEST_TIMEOUT**
+A public request timeout in seconds:
+```console
+foo@bar:~$ trabas server set-config --public-request-timeout 10
+```
+
 ### **SV_CACHE_CONFIGS**
 
 Trabas provides a caching layer for a particular HTTP request. The cache is unique by **Client ID**, **Method**, **URI**, and **Body**. This is reliable when the request headers is insignificant to the result (Some ID spefic request by headers might not use this config).

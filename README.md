@@ -54,7 +54,7 @@ this starts the public request and client service listeners.
 
 **User Access**
 
-Once the server and client are connected, by default, the user can access your underlying service on `serverhost:8001/[client id]` (you might proxify the server to hide the actual port). But, you also directly access it on `serverhost:8001` with `trabas_client_id` cookie header sent by the client and you need to enable this feature by an additional `--cache-client-id` flag on server service.
+Once the server and client are connected, by default, the user can access your underlying service on `serverhost:8001/[client id]` (prefix path) or `serverhost:8001/?trabas_client_id=[client id]` (query param). But, you also directly access it on `serverhost:8001` with `trabas_client_id` cookie header sent by the client and you need to enable this feature by an additional `--cache-client-id` flag on server service (you might proxify the server to hide the actual port).
 
 **Note** that the public endpoint will also be returned by the server once a connection successfully established.
 

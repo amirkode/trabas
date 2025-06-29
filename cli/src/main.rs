@@ -37,6 +37,7 @@ const CONFIG_ARG_CL_SERVER_SIGNING_KEY: &str = "server-signing-key";
 const CONFIG_ARG_SV_GEN_KEY: &str = "gen-key";
 const CONFIG_ARG_SV_KEY: &str = "key";
 const CONFIG_ARG_SV_PUBLIC_ENDPOINT: &str = "public-endpoint";
+const CONFIG_ARG_SV_PUBLIC_REQUEST_TIMEOUT: &str = "public-request-timeout";
 const CONFIG_ARG_SV_REDIS_ENABLE: &str = "redis-enable";
 const CONFIG_ARG_SV_REDIS_HOST: &str = "redis-host";
 const CONFIG_ARG_SV_REDIS_PORT: &str = "redis-port";
@@ -140,6 +141,9 @@ enum ServerActions {
         // does not have to define in the path
         #[arg(long)]
         cache_client_id: bool,
+        // add tunnel id to response headers
+        #[arg(long)]
+        return_tunnel_id: bool,
     },
     CacheConfig {
         #[command(subcommand)]
@@ -164,6 +168,12 @@ enum ServerActions {
             help="Public accessible endpoint"
         )]
         public_endpoint: Option<String>,
+        #[arg(
+            name = CONFIG_ARG_SV_PUBLIC_REQUEST_TIMEOUT, 
+            long,
+            help="Public request timeout in seconds"
+        )]
+        public_request_timeout: Option<String>,
         #[arg(
             name = CONFIG_ARG_SV_REDIS_ENABLE, 
             long,
@@ -441,9 +451,22 @@ async fn main() {
         Commands::Client { action } => match action {
             ClientActions::Serve { host, port , tls } => {
                 print_log_header(SERVICE_TAG_CLIENT.to_string());
-                client::entry_point((*host).clone(), *port, *tls).await;
+                // client::entry_point((*host).clone(), *port, *tls).await;
+                client::entry_point(
+                    client::config::ClientRequestConfig::new(
+                        (*host).clone(),
+                        *port,
+                        *tls
+                    )
+                ).await;
             },
-            ClientActions::SetConfig { client_id, server_host, server_port, server_signing_key, force } => {
+            ClientActions::SetConfig { 
+                client_id, 
+                server_host, 
+                server_port, 
+                server_signing_key, 
+                force 
+            } => {
                 cleanup_logger_state();
                 
                 if client_id.is_none() && server_host.is_none() && server_port.is_none() && server_signing_key.is_none() {
@@ -480,7 +503,14 @@ async fn main() {
             }
         },
         Commands::Server { action } => match action {
-            ServerActions::Run { host, public_port, client_port,  client_request_limit, cache_client_id} => {
+            ServerActions::Run { 
+                host, 
+                public_port, 
+                client_port,  
+                client_request_limit, 
+                cache_client_id,
+                return_tunnel_id,
+            } => {
                 print_log_header(SERVICE_TAG_SERVER.to_string());
                 let root_host = match host {
                     Some(value) => (*value).clone(),
@@ -490,7 +520,17 @@ async fn main() {
                     Some(value) => *value,
                     None => 0
                 };
-                server::entry_point(root_host, *public_port, *client_port, client_request_limit, *cache_client_id).await
+                
+                server::entry_point(
+                    server::config::ServerRequestConfig::new(
+                        root_host,
+                        *public_port,
+                        *client_port,
+                        client_request_limit,
+                        *cache_client_id,
+                        *return_tunnel_id
+                    )
+                ).await;
             },
             ServerActions::CacheConfig { action } => match action {
                 ServerCacheActions::List { } => {
@@ -506,7 +546,17 @@ async fn main() {
                     server::config::remove_cache_config((*client_id).clone(), (*method).clone(), (*path).clone()).await;
                 },
             },
-            ServerActions::SetConfig { gen_key, key, public_endpoint, redis_enable, redis_host, redis_port, redis_pass, force } => {
+            ServerActions::SetConfig { 
+                gen_key, 
+                key, 
+                public_endpoint, 
+                public_request_timeout, 
+                redis_enable, 
+                redis_host, 
+                redis_port, 
+                redis_pass, 
+                force 
+            } => {
                 cleanup_logger_state();
 
                 if gen_key.is_none() && 
@@ -515,13 +565,15 @@ async fn main() {
                     redis_host.is_none() &&
                     redis_port.is_none() && 
                     redis_pass.is_none() &&
-                    public_endpoint.is_none() {
+                    public_endpoint.is_none() &&
+                    public_request_timeout.is_none() {
                     let mut cmd = Cli::command();
                     let error_message = format!(
-                        "At least one of the following arguments must be provided: --{}, --{}, --{}, --{}, --{}, --{} or --{}",
+                        "At least one of the following arguments must be provided: --{}, --{}, --{}, --{}, --{}, --{}, --{} or --{}",
                         CONFIG_ARG_SV_GEN_KEY,
                         CONFIG_ARG_SV_KEY,
                         CONFIG_ARG_SV_PUBLIC_ENDPOINT,
+                        CONFIG_ARG_SV_PUBLIC_REQUEST_TIMEOUT,
                         CONFIG_ARG_SV_REDIS_ENABLE,
                         CONFIG_ARG_SV_REDIS_HOST,
                         CONFIG_ARG_SV_REDIS_PORT,
@@ -559,6 +611,7 @@ async fn main() {
                     (*redis_port).clone(),
                     (*redis_pass).clone(),
                     (*public_endpoint).clone(),
+                    (*public_request_timeout).clone(),
                     *force);
             }
         },

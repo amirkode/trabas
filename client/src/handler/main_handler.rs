@@ -129,11 +129,12 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         // spawn handlers
         let cloned_underlying_host = underlying_host.clone();
         let cloned_service = service.clone();
+        let cloned_tunnel_id = ack.id.clone();
         let receiver_handler = tokio::spawn(async move {
-            tunnel_receiver_handler(handler_stopped1, read_stream_mutex, tx_mutex, cloned_underlying_host, cloned_service).await;
+            tunnel_receiver_handler(handler_stopped1, read_stream_mutex, tx_mutex, cloned_underlying_host, cloned_service, cloned_tunnel_id).await;
         });
         let sender_handler = tokio::spawn(async move {
-            tunnel_sender_handler(handler_stopped2, write_stream_mutex, rx_mutex).await;
+            tunnel_sender_handler(handler_stopped2, write_stream_mutex, rx_mutex, ack.id).await;
         });
 
         // wait until released
@@ -158,9 +159,10 @@ pub async fn tunnel_receiver_handler(
     stream: Arc<Mutex<TcpStreamTLS>>, 
     tx: Arc<Mutex<Sender<PublicResponse>>>, 
     underlying_host: String, 
-    service: UnderlyingService
+    service: UnderlyingService,
+    tunnel_id: String,
 ) {
-    _info!("Tunnel receiver handler started.");
+    _info!("Tunnel [{}] receiver handler started.", tunnel_id.clone());
     while !(*handler_stopped.lock().await) {
         // get incoming request server service to forward
         let mut request = Vec::new();
@@ -184,22 +186,23 @@ pub async fn tunnel_receiver_handler(
             let cloned_underlying_host = underlying_host.clone();
             let cloned_service = service.clone();
             let cloned_tx = tx.clone();
+            let cloned_tunnel_id  = tunnel_id.clone();
             tokio::spawn(async move {
                 let public_response = match cloned_service.foward_request(public_request.data, cloned_underlying_host).await {
                     Ok(res) => {
-                        PublicResponse::new(public_request.id.clone(), res.clone())
+                        PublicResponse::new(public_request.id.clone(), cloned_tunnel_id, res.clone())
                     },
                     Err(err) => {
                         _error!("Request [{}] cannot be processed: {}", public_request.id.clone(), err);
                         let msg = String::from("Request cannot be processed");
                         let res = http_json_response_as_bytes(
                             HttpResponse::new(false, msg), StatusCode::from_u16(400).unwrap()).unwrap();
-                        PublicResponse::new(public_request.id.clone(), res.clone())
+                        PublicResponse::new(public_request.id.clone(), cloned_tunnel_id, res.clone())
                     }
                 };
         
                 if let Ok(_) = cloned_tx.lock().await.send(public_response).await {
-                    _info!("Response for request {} received in {} seconds and was enqueued to forward back.", public_request.id, start_request.elapsed().as_secs());
+                    _info!("Response for request {} received in {} ms and was enqueued to forward back.", public_request.id, start_request.elapsed().as_millis());
                 }
             });
         }
@@ -208,15 +211,16 @@ pub async fn tunnel_receiver_handler(
     // update handler stop state
     (*handler_stopped.lock().await) = true;
 
-    _info!("Tunnel receiver handler stopped.");
+    _info!("Tunnel [{}] receiver handler stopped.", tunnel_id);
 }
 
 pub async fn tunnel_sender_handler(
     handler_stopped: Arc<Mutex<bool>>,
     stream: Arc<Mutex<TcpStreamTLS>>,
-    rx: Arc<Mutex<Receiver<PublicResponse>>>
+    rx: Arc<Mutex<Receiver<PublicResponse>>>,
+    tunnel_id: String,
 ) {
-    _info!("Tunnel sender handler started.");
+    _info!("Tunnel [{}] sender handler started.", tunnel_id.clone());
     let mut skip = 0;
     while !(*handler_stopped.lock().await) {
         // get ready public responses from the queue
@@ -248,5 +252,5 @@ pub async fn tunnel_sender_handler(
     // update handler stop state
     (*handler_stopped.lock().await) = true;
 
-    _info!("Tunnel sender handler stopped.");
+    _info!("Tunnel [{}] sender handler stopped.", tunnel_id);
 }

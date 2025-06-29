@@ -8,6 +8,27 @@ use tokio_native_tls::native_tls::Certificate;
 
 use common::config::*;
 
+#[derive(Debug, Clone)]
+pub struct ClientRequestConfig {
+    pub host: Option<String>,       
+    pub port: u16,
+    pub use_tls: bool
+}
+
+impl ClientRequestConfig {
+    pub fn new (
+        host: Option<String>, 
+        port: u16, 
+        use_tls: bool
+    ) -> Self {
+        ClientRequestConfig {
+            host,
+            port,
+            use_tls
+        }
+    }
+}
+
 pub const CONFIG_CA_FILE_NAME: &str = "ca.crt";
 
 // simple validation for config keys

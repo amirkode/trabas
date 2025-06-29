@@ -42,7 +42,7 @@ impl CacheRepo for CacheRepoRedisImpl {
 
     async fn set(&self, key: String, cache: Cache) -> Result<(), String> {
         let data = to_json_vec(&cache);
-        self.connection.clone().hset(REDIS_KEY_CACHE, key.clone(), data).await
+        self.connection.clone().hset::<_, _, _, ()>(REDIS_KEY_CACHE, key.clone(), data).await
             .map_err(|e| format!("Error setting cache {}: {}.", key, e))?;
 
         Ok(())

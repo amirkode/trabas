@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TunnelAck {
+    pub id: String, // tunnel id
     pub success: bool,
     pub message: String,
     // public accessible endpoints
@@ -10,8 +11,9 @@ pub struct TunnelAck {
 }
 
 impl TunnelAck {
-    pub fn new(success: bool, message: String, public_endpoints: Vec<String>) -> Self {
+    pub fn new(id: String, success: bool, message: String, public_endpoints: Vec<String>) -> Self {
         TunnelAck {
+            id,
             success,
             message,
             public_endpoints

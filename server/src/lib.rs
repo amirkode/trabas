@@ -22,7 +22,6 @@ use service::public_service::PublicService;
 use tokio::net::TcpListener;
 use redis::aio::MultiplexedConnection;
 
-// TODO: too many parameters, bind it in a data struct
 // entry point of the server service
 pub async fn entry_point(config: ServerRequestConfig) {
     // validate required configs

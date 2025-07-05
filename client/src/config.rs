@@ -27,6 +27,13 @@ impl ClientRequestConfig {
             use_tls
         }
     }
+
+    pub fn underlying_svc_address(&self) -> String {
+        match &self.host {
+            Some(h) => format!("{}:{}", h, self.port),
+            None => format!("127.0.0.1:{}", self.port)
+        }
+    }
 }
 
 pub const CONFIG_CA_FILE_NAME: &str = "ca.crt";

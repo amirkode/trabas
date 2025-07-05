@@ -25,7 +25,12 @@ use common::config::keys as config_keys;
 use crate::{config::get_ca_certificate, service::underlying_service::UnderlyingService};
 
 pub async fn register_handler(underlying_host: String, service: UnderlyingService, use_tls: bool) -> () {
-    // TODO: add initial connection validation for underlying service
+    // initial connection validation for underlying service
+    if service.test_connection(underlying_host.clone()).await.is_err() {
+        _error!("Failed to connect to the underlying service at {}. Please check the service is running and accessible.", underlying_host);
+        return;
+    }
+    
     let server_host = std::env::var(config_keys::CONFIG_KEY_CLIENT_SERVER_HOST).unwrap_or_default();
     let server_port = std::env::var(config_keys::CONFIG_KEY_CLIENT_SERVER_PORT).unwrap_or_default();
     let server_address = format!("{}:{}", server_host, server_port);
@@ -188,6 +193,7 @@ pub async fn tunnel_receiver_handler(
             let cloned_tx = tx.clone();
             let cloned_tunnel_id  = tunnel_id.clone();
             tokio::spawn(async move {
+                // TODO: flexible target port baesd on request (but need to consider security implications)
                 let public_response = match cloned_service.foward_request(public_request.data, cloned_underlying_host).await {
                     Ok(res) => {
                         PublicResponse::new(public_request.id.clone(), cloned_tunnel_id, res.clone())

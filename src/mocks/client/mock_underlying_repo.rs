@@ -39,4 +39,9 @@ where
 
         Err(String::from("An error occured"))
     }
+
+    async fn test_connection(&self, _: String) -> Result<(), String> {
+        // always return ok for mock
+        Ok(())
+    }
 }

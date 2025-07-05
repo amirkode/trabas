@@ -2,11 +2,13 @@ use common::net::{HttpReader, TcpStreamTLS};
 // use log::info;
 use tokio::net::TcpStream;
 use async_trait::async_trait;
+use tokio::io::AsyncWriteExt;
 
 // TODO: couldn't think of a better name, might change it in the future.
 #[async_trait]
 pub trait UnderlyingRepo: Send + Sync {
     async fn forward(&self, request: Vec<u8>, host: String) -> Result<Vec<u8>, String>;
+    async fn test_connection(&self, host: String) -> Result<(), String>;
 }
 
 pub struct UnderlyingRepoImpl { }
@@ -49,5 +51,14 @@ impl UnderlyingRepo for UnderlyingRepoImpl {
         // }
 
         Ok(res)
+    }
+
+    async fn test_connection(&self, host: String) -> Result<(), String> {
+        let mut stream = TcpStream::connect(host.as_str()).await
+            .map_err(|e| format!("Error connecting to underlying service: {}", e))?;
+
+        stream.shutdown().await.map_err(|e: std::io::Error| format!("Error closing connection: {}", e))?;
+
+        Ok(())
     }
 }

@@ -168,6 +168,8 @@ pub async fn tunnel_receiver_handler(
     tunnel_id: String,
 ) {
     _info!("Tunnel [{}] receiver handler started.", tunnel_id.clone());
+
+    let mut last_dc: Option<Instant> = None;
     while !(*handler_stopped.lock().await) {
         // get incoming request server service to forward
         let mut request = Vec::new();
@@ -177,7 +179,16 @@ pub async fn tunnel_receiver_handler(
         }
 
         if request.len() == 0 {
-            // no request found yet
+
+            // TODO: get the value from config
+            let timeout = 30; // in seconds
+            if last_dc.is_none() {
+                last_dc = Some(Instant::now());
+            } else if last_dc.unwrap().elapsed() > Duration::from_secs(timeout) {
+                _info!("Connection hung up for {} seconds, stopping receiver handler...", timeout);
+                // TODO: add health check here
+                break;
+            }
             continue;
         }
 
@@ -189,21 +200,20 @@ pub async fn tunnel_receiver_handler(
             
             // dispatch request to underlying service
             let cloned_underlying_host = underlying_host.clone();
-            let cloned_service = service.clone();
-            let cloned_tx = tx.clone();
-            let cloned_tunnel_id  = tunnel_id.clone();
+            let cloned_service: UnderlyingService = service.clone();
+            let cloned_tx: Arc<Mutex<Sender<PublicResponse>>> = tx.clone();
             tokio::spawn(async move {
-                // TODO: flexible target port baesd on request (but need to consider security implications)
-                let public_response = match cloned_service.foward_request(public_request.data, cloned_underlying_host).await {
+                // TODO: flexible target port based on request (but need to consider security implications)
+                let public_response: PublicResponse = match cloned_service.foward_request(public_request.data, cloned_underlying_host).await {
                     Ok(res) => {
-                        PublicResponse::new(public_request.id.clone(), cloned_tunnel_id, res.clone())
+                        PublicResponse::new(public_request.id.clone(), "".to_string(), res.clone())
                     },
                     Err(err) => {
                         _error!("Request [{}] cannot be processed: {}", public_request.id.clone(), err);
                         let msg = String::from("Request cannot be processed");
                         let res = http_json_response_as_bytes(
                             HttpResponse::new(false, msg), StatusCode::from_u16(400).unwrap()).unwrap();
-                        PublicResponse::new(public_request.id.clone(), cloned_tunnel_id, res.clone())
+                        PublicResponse::new(public_request.id.clone(), "".to_string(), res.clone())
                     }
                 };
         
@@ -227,7 +237,6 @@ pub async fn tunnel_sender_handler(
     tunnel_id: String,
 ) {
     _info!("Tunnel [{}] sender handler started.", tunnel_id.clone());
-    let mut skip = 0;
     while !(*handler_stopped.lock().await) {
         // get ready public responses from the queue
         if let Some(public_response) = rx.lock().await.recv().await {
@@ -240,18 +249,6 @@ pub async fn tunnel_sender_handler(
             }
 
             _info!("Request: {} processed.", public_response.request_id);
-        } else {
-            skip += 1;
-            // every 20k skips send health check
-            if skip == 20000 {
-                let hc = prepare_packet(Vec::from(String::from(HEALTH_CHECK_PACKET_ACK).as_bytes()));
-                if let Err(_) = stream.lock().await.write_all(&hc).await {
-                    break;
-                }
-                // sleep for 100 ms
-                sleep(Duration::from_millis(100)).await;
-                skip = 0;
-            }
         }
     }
 

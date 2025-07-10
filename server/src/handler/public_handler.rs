@@ -17,12 +17,10 @@ use tokio::net::TcpStream;
 use common::data::dto::public_request::PublicRequest;
 use common::{_info, _error};
 use common::config::keys as config_keys;
+use crate::config::ext_keys;
 use crate::service::cache_service::CacheService;
 use crate::service::client_service::ClientService;
 use crate::service::public_service::PublicService;
-
-const CLIENT_ID_COOKIE_KEY: &str = "trabas_client_id";
-const TUNNEL_ID_HEADER_KEY: &str = "trabas_tunnel_id";
 
 pub async fn register_public_handler(
     stream: TcpStream, 
@@ -224,12 +222,12 @@ fn normalize_response_headers(res: Vec<u8>, to_cache_client_id: Option<String>, 
     ];
     let mut headers_to_set = HashMap::new();
     if let Some(tunnel_id) = to_return_tunnel_id {
-        headers_to_set.insert(TUNNEL_ID_HEADER_KEY.to_string(), tunnel_id);
+        headers_to_set.insert(ext_keys::TUNNEL_ID_HEADER_KEY.to_string(), tunnel_id);
     }
 
     let mut cookies_to_set = HashMap::new();
     if let Some(client_id) = to_cache_client_id {
-        cookies_to_set.insert(CLIENT_ID_COOKIE_KEY.to_string(), client_id);
+        cookies_to_set.insert(ext_keys::CLIENT_ID_COOKIE_KEY.to_string(), client_id);
     }
     
     return modify_headers_of_response_bytes(&res, headers_to_remove, headers_to_set, cookies_to_set, true);
@@ -279,7 +277,7 @@ fn get_unique_body_as_bytes(req: Request<Vec<u8>>) -> Vec<u8> {
 // TODO: add client connection validation and retrier until a certain count
 fn get_client_id<T>(mut request: Request<T>, cache_client_id: bool) -> Result<(Request<T>, String, String), String> {
     let cached_client = match cache_client_id {
-        true => get_cookie_from_request(&request, CLIENT_ID_COOKIE_KEY),
+        true => get_cookie_from_request(&request, ext_keys::CLIENT_ID_COOKIE_KEY),
         false => None
     };
     let uri = request.uri().clone();
@@ -288,7 +286,7 @@ fn get_client_id<T>(mut request: Request<T>, cache_client_id: bool) -> Result<(R
     
     // check client id from request params
     let mut client_id = query.split('&')
-        .find(|param| param.starts_with(CLIENT_ID_COOKIE_KEY))
+        .find(|param| param.starts_with(ext_keys::CLIENT_ID_COOKIE_KEY))
         .and_then(|param| param.split('=').nth(1))
         .map(|id| id.to_string());
     let check_prefix = client_id.is_none();
@@ -335,7 +333,7 @@ fn get_client_id<T>(mut request: Request<T>, cache_client_id: bool) -> Result<(R
     } else {
         // just update the query
         query = query.split('&')
-            .filter(|param| !param.starts_with(CLIENT_ID_COOKIE_KEY))
+            .filter(|param| !param.starts_with(ext_keys::CLIENT_ID_COOKIE_KEY))
             .collect::<Vec<&str>>()
             .join("&");
         Some(format!("{}{}", path, if query.is_empty() { query } else { format!("?{}", query)}).parse().unwrap())

@@ -11,6 +11,12 @@ use crate::{
     service::cache_service::CacheService
 };
 
+// additional keys for server configuration
+pub mod ext_keys {
+    pub const CLIENT_ID_COOKIE_KEY: &str = "trabas_client_id";
+    pub const TUNNEL_ID_HEADER_KEY: &str = "trabas_tunnel_id";
+}
+
 #[derive(Debug, Clone)]
 pub struct ServerRequestConfig {
     pub host: String, 

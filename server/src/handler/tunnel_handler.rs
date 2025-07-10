@@ -15,6 +15,7 @@ use common::string;
 use common::data::dto::public_response::PublicResponse;
 use common::data::dto::tunnel_client::TunnelClient;
 
+use crate::config::ext_keys;
 use crate::service::client_service::ClientService;
 use crate::service::public_service::PublicService;
 
@@ -71,7 +72,11 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     // public endpoints are returned by the server because server should control the mechanism
     // and might change it in the future
     let endpoint_prefix = std::env::var(config::keys::CONFIG_KEY_SERVER_PUBLIC_ENDPOINT).unwrap_or_default();
-    let public_endpoints = vec![append_path_to_url(&endpoint_prefix, &client.id), append_path_to_url(&endpoint_prefix, &client.alias_id)];
+    let endpoint_prefix = append_path_to_url(&endpoint_prefix, "");
+    let public_endpoints = vec![
+        format!("{}{} or {}?{}={}", endpoint_prefix, &client.id, &endpoint_prefix, ext_keys::CLIENT_ID_COOKIE_KEY, &client.id),
+        format!("{}{} or {}?{}={}", endpoint_prefix, &client.alias_id, &endpoint_prefix, ext_keys::CLIENT_ID_COOKIE_KEY, &client.alias_id),
+    ];
     let tunnel_ack = TunnelAck::new(
         tunnel_id.clone(),
         true, 
@@ -185,7 +190,7 @@ async fn tunnel_sender_handler(
                 let _ = match stream.lock().await.write_all(&bytes_req).await {
                     Ok(ok) => ok,
                     Err(err) => {
-                        format!("{}", err);
+                       _error!("Error sending request [{}] to client [{}]: {}", public_request.id, client_id, err);
                         break;
                     }
                 };
@@ -246,12 +251,15 @@ async fn tunnel_receiver_handler(
         let packets = separate_packets(raw_response);
         for packet in packets {
             // enqueue Public Response
-            let response: PublicResponse = match from_json_slice(&packet) {
+            let mut response: PublicResponse = match from_json_slice(&packet) {
                 Some(value) => { value },
                 None => {
                     break;
                 }
             };
+
+            // aassign tunnel_id to response
+            response.tunnel_id = tunnel_id.clone();
 
             if let Err(msg) = public_service.lock().await.assign_response(client_id.clone(), response.clone()).await {
                 _error!("{}", msg);

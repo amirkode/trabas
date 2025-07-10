@@ -26,7 +26,11 @@ pub struct PublicRequest {
 
 impl fmt::Display for PublicRequest {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Write the desired string representation of the struct
-        write!(f, "[id: {})", self.id)
+        write!(
+            f,
+            "{{ id: \"{}\", data: \"{}\" }}",
+            self.id,
+            String::from_utf8_lossy(&self.data)
+        )
     }
 }

@@ -66,13 +66,13 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
         let tunnel_ack = TunnelAck::new(
             tunnel_id, 
             false, 
-            format!("Incompatible version. Server version ({}) {} Min Requested ({}) and Client version ({}) {} Min Requested {}",
+            format!(
+                "Version mismatch: Server version code = {} (required ≥ {}) | Client version code = {} (required ≥ {}).",
                 version_code,
-                if version_code >= client.min_sv_version_code { ">=" } else { "<" },
                 client.min_sv_version_code,
                 client.cl_version_code,
-                if client.cl_version_code >= min_client_version_code { ">=" } else { "<" },
-                min_client_version_code), 
+                min_client_version_code
+            ),
             vec![]);
         let packet = prepare_packet(to_json_vec(&tunnel_ack));
         write_stream.write_all(&packet).await.unwrap();

@@ -702,8 +702,8 @@ mod tests {
             // this should be triggered when the test is run individually
             // since the log capture is set up
             let find = vec![
-                "Incompatible version. Server version (100) >= Min Requested (100) and Client version (99) < Min Requested 100.",
-                "ncompatible version. Server version (100) < Min Requested (101) and Client version (100) >= Min Requested 100.",
+                "Version mismatch: Server version code = 100 (required ≥ 100) | Client version code = 99 (required ≥ 100).",
+                "Version mismatch: Server version code = 100 (required ≥ 101) | Client version code = 100 (required ≥ 100).",
                 "Successfully authenticated and registered with the server service."
             ];
             for log in find {

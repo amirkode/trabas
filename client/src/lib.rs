@@ -10,6 +10,7 @@ pub mod config;
 pub mod data;
 pub mod handler; 
 pub mod service;
+pub mod version;
 
 pub async fn entry_point(config: ClientRequestConfig) {
     validate_configs();

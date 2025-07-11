@@ -1,26 +1,38 @@
 #[cfg(test)]
 mod tests {
-    use std::{collections::{HashMap, HashSet}, env, sync::Arc, time::Duration};
-
-    use common::{_error, _info};
-    use common::config::keys as config_keys;
-    use common::data::dto::cache_config::CacheConfig;
-    use env_logger::{Env, Builder, Target};
-    use reqwest::{header::{HeaderMap, HeaderValue, COOKIE, SET_COOKIE}, Client, Response};
-    use server::service::cache_service::CacheService;
-    use std::sync::Once;
-    use tokio::{sync::Mutex, task::{self, JoinHandle}, time::sleep};
-    use std::sync::Mutex as StdMutex;
+    use std::{
+        collections::{HashMap, HashSet},
+        env,
+        sync::{Arc, Mutex as StdMutex, Arc as StdArc, Once},
+        time::Duration,
+    };
+    use env_logger::{Builder, Env, Target};
+    use log::{Level, Metadata, Record, SetLoggerError};
+    use reqwest::{
+        header::{HeaderMap, HeaderValue, COOKIE, SET_COOKIE},
+        Client, Response,
+    };
+    use tokio::{
+        sync::Mutex,
+        task::{self, JoinHandle},
+        time::sleep,
+    };
+    use common::{
+        _error, _info,
+        config::keys as config_keys,
+        data::dto::cache_config::CacheConfig,
+    };
     use trabas::mocks::{
-        client::mock_underlying_repo::MockUnderlyingRepo, 
+        client::mock_underlying_repo::MockUnderlyingRepo,
         config::MockConfigHandlerImpl,
         server::{
-            mock_cache_repo::MockCacheRepo, 
-            mock_client_repo::MockClientRepo, 
-            mock_request_repo::MockRequestRepo, 
-            mock_response_repo::MockResponseRepo
-        }
+            mock_cache_repo::MockCacheRepo,
+            mock_client_repo::MockClientRepo,
+            mock_request_repo::MockRequestRepo,
+            mock_response_repo::MockResponseRepo,
+        },
     };
+    use server::service::cache_service::CacheService;
 
     async fn send_http_request(url: String, cookies: Option<HashMap<String, String>>) -> Result<Response, String> {
         let client = Client::new();
@@ -578,5 +590,163 @@ mod tests {
         client_tunnel3_exec.abort();
 
         // TODO: add more relevant assertions
+    }
+
+    #[tokio::test]
+    async fn test_e2e_request_flow_with_incompatible_client_version() {
+        // setup test logger capture
+        let logs = StdArc::new(StdMutex::new(Vec::new()));
+        let _ = set_test_logger(logs.clone());
+
+        // common envs
+        let server_secret = "74657374696e676b6579313233343536";
+        env::set_var(String::from(config_keys::CONFIG_KEY_SERVER_SECRET), server_secret);
+        env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_SERVER_HOST), "127.0.0.1");
+        env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_SERVER_PORT), "3334");
+        env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY), server_secret);
+
+        // set server verison config
+        std::env::set_var("TEST_MIN_CLIENT_VERSION_CODE", "100");
+        std::env::set_var("TEST_SERVER_VERSION_CODE", "100");
+
+        // server service
+        let cache_repo = Arc::new(MockCacheRepo::new());
+        let client_repo = Arc::new(MockClientRepo::new());
+        let request_repo = Arc::new(MockRequestRepo::new());
+        let response_repo = Arc::new(MockResponseRepo::new());
+        let config_handler = Arc::new(MockConfigHandlerImpl::new());
+        let server_exec = tokio::spawn(async move {
+            server::run(
+                server::config::ServerRequestConfig::new(
+                    "127.0.0.1".to_string(),
+                    3333,
+                    3334,
+                    0,
+                    false,
+                    false
+                ),
+                cache_repo,
+                client_repo,
+                request_repo,
+                response_repo,
+                config_handler
+            ).await;
+        });
+
+        // delay for 2 seconds to wait the server to start up
+        sleep(Duration::from_secs(2)).await;
+
+        // patch the client version to be lower than required
+        env::set_var("TEST_CLIENT_VERSION_CODE", "99");
+        env::set_var("TEST_MIN_SERVER_VERSION_CODE", "100");
+        env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_ID), "client_incompatible1");
+
+        // start the client services
+        let mock_response = String::from("pong");
+        let underlying_repo1 = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), Arc::new(StdMutex::new(|| {}))));
+        let underlying_repo2 = underlying_repo1.clone();
+        let underlying_repo3 = underlying_repo1.clone();
+        let use_tls = false;
+        let client1_exec = tokio::spawn(async move {
+            client::serve(String::from("This has no effect"), underlying_repo1, use_tls).await;
+        });
+
+        // attempt to hit public endpoint
+        let url = String::from("http://127.0.0.1:3333/client_incompatible2/ping");
+        let response = send_http_request(url.clone(), None).await;
+        assert!(response.is_err(), "Expected error response, got: {:?}", response);
+        assert_eq!(response.unwrap_err(), "Invalid status code");
+
+        // delay for 1 seconds
+        sleep(Duration::from_secs(1)).await;
+
+        // now, we simulate if the min service version is larger than the server version
+        env::set_var("TEST_CLIENT_VERSION_CODE", "100");
+        env::set_var("TEST_MIN_SERVER_VERSION_CODE", "101");
+        env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_ID), "client_incompatible2");
+
+        let client2_exec = tokio::spawn(async move {
+            client::serve(String::from("This has no effect"), underlying_repo2, use_tls).await;
+        });
+
+        // delay for 1 seconds
+        sleep(Duration::from_secs(1)).await;
+
+        // second attempt still fails
+        let url = String::from("http://127.0.0.1:3333/client_incompatible2/ping");
+        let response = send_http_request(url.clone(), None).await;
+        assert!(response.is_err(), "Expected error response, got: {:?}", response);
+        assert_eq!(response.unwrap_err(), "Invalid status code");
+
+        // reset the version codes, this will fallback to the constants in each module
+        env::set_var("TEST_MIN_CLIENT_VERSION_CODE", "");
+        env::set_var("TEST_SERVER_VERSION_CODE", "");
+        env::set_var("TEST_CLIENT_VERSION_CODE", "");
+        env::set_var("TEST_MIN_SERVER_VERSION_CODE", "");
+        env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_ID), "client_compatible");
+
+        let client3_exec = tokio::spawn(async move {
+            client::serve(String::from("This has no effect"), underlying_repo3, use_tls).await;
+        });
+
+        // final delay
+        sleep(Duration::from_secs(2)).await;
+
+        // this one must be successful, as the client version is now compatible
+        let url = String::from("http://127.0.0.1:3333/client_compatible/ping");
+        let response = send_http_request(url.clone(), None).await;
+        assert!(response.is_ok(), "Expected successful response, got: {:?}", response);
+
+        let logs = logs.lock().unwrap();
+        if !logs.is_empty() {
+            // this should be triggered when the test is run individually
+            // since the log capture is set up
+            let find = vec![
+                "Version mismatch: Server version code = 100 (required ≥ 100) | Client version code = 99 (required ≥ 100).",
+                "Version mismatch: Server version code = 100 (required ≥ 101) | Client version code = 100 (required ≥ 100).",
+                "Successfully authenticated and registered with the server service."
+            ];
+            for log in find {
+                assert!(logs.iter().any(|l| l.contains(log)));
+            }
+        }
+
+        // abort all services
+        server_exec.abort();
+        client1_exec.abort();
+        client2_exec.abort();
+        client3_exec.abort();
+    }
+    
+    struct TestLogger {
+        logs: StdArc<StdMutex<Vec<String>>>,
+    }
+    
+    impl log::Log for TestLogger {
+        fn enabled(&self, metadata: &Metadata) -> bool {
+            metadata.level() <= Level::Info
+        }
+        fn log(&self, record: &Record) {
+            use chrono::Utc;
+            let now = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ");
+            let formatted = format!(
+                "{} {} {}: {}",
+                now,
+                record.level(),
+                record.target(),
+                record.args()
+            );
+            println!("{}", formatted);
+            if self.enabled(record.metadata()) {
+                let mut logs = self.logs.lock().unwrap();
+                logs.push(formatted);
+            }
+        }
+        fn flush(&self) {}
+    }
+    
+    fn set_test_logger(logs: StdArc<StdMutex<Vec<String>>>) -> Result<(), SetLoggerError> {
+        let logger = Box::leak(Box::new(TestLogger { logs }));
+        log::set_logger(logger).map(|()| log::set_max_level(log::LevelFilter::Info))
     }
 }

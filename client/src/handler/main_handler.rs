@@ -12,8 +12,7 @@ use common::{
         read_bytes_from_socket_for_internal, 
         separate_packets, 
         HttpResponse, 
-        TcpStreamTLS, 
-        HEALTH_CHECK_PACKET_ACK
+        TcpStreamTLS,
     }, 
     security::sign_value
 };
@@ -23,6 +22,10 @@ use tokio_native_tls::{native_tls, TlsConnector};
 use common::{_error, _info};
 use common::config::keys as config_keys;
 use crate::{config::get_ca_certificate, service::underlying_service::UnderlyingService};
+use crate::version::{
+    get_client_version_code,
+    get_min_server_version_code,
+};
 
 pub async fn register_handler(underlying_host: String, service: UnderlyingService, use_tls: bool) -> () {
     // initial connection validation for underlying service
@@ -156,7 +159,7 @@ fn get_tunnel_client() -> TunnelClient {
     let signing_key = std::env::var(config_keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY)
         .expect(format!("{} env has not been set", config_keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY).as_str());
     let signature = sign_value(client_id.clone(), signing_key);
-    TunnelClient::new(client_id, signature)
+    TunnelClient::new(client_id, signature, get_client_version_code(), get_min_server_version_code())
 }
 
 pub async fn tunnel_receiver_handler(

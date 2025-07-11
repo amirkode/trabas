@@ -3,6 +3,7 @@ pub mod handler;
 pub mod service;
 pub mod types;
 pub mod config;
+pub mod version;
 
 use std::sync::Arc;
 use common::_info;

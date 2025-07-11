@@ -18,6 +18,10 @@ use common::data::dto::tunnel_client::TunnelClient;
 use crate::config::ext_keys;
 use crate::service::client_service::ClientService;
 use crate::service::public_service::PublicService;
+use crate::version::{
+    get_server_version_code,
+    get_min_client_version_code,
+};
 
 pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientService, public_service: PublicService) -> () {
     let tunnel_id = string::generate_rand_id(32);
@@ -54,9 +58,31 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
             return;    
         }
     };
+
+    // validate versions
+    let version_code = get_server_version_code();
+    let min_client_version_code = get_min_client_version_code();
+    if !client.validate_version(version_code, min_client_version_code) {
+        let tunnel_ack = TunnelAck::new(
+            tunnel_id, 
+            false, 
+            format!("Incompatible version. Server version ({}) {} Min Requested ({}) and Client version ({}) {} Min Requested {}",
+                version_code,
+                if version_code >= client.min_sv_version_code { ">=" } else { "<" },
+                client.min_sv_version_code,
+                client.cl_version_code,
+                if client.cl_version_code >= min_client_version_code { ">=" } else { "<" },
+                min_client_version_code), 
+            vec![]);
+        let packet = prepare_packet(to_json_vec(&tunnel_ack));
+        write_stream.write_all(&packet).await.unwrap();
+        _error!("{}", tunnel_ack.message);
+        return;
+    }
+
     let client_id = client.id.clone();
     // validate connection before registering client
-    if !validate_connection(client.signature.clone(), client.id.clone()) {
+    if !validate_signature(client.signature.clone(), client.id.clone()) {
         let tunnel_ack = TunnelAck::new(
             tunnel_id,
             false, 
@@ -134,7 +160,7 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     });
 }
 
-fn validate_connection(signature: String, client_id: String) -> bool {
+fn validate_signature(signature: String, client_id: String) -> bool {
     let secret = std::env::var(config::keys::CONFIG_KEY_SERVER_SECRET).unwrap_or_default();
     validate_signature!(signature, client_id, secret)
 }
@@ -245,6 +271,7 @@ async fn tunnel_receiver_handler(
 
         // empty response
         if raw_response.len() == 0 {
+            // TODO: handle break
             continue;
         }
 

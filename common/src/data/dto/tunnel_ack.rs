@@ -11,12 +11,17 @@ pub struct TunnelAck {
 }
 
 impl TunnelAck {
-    pub fn new(id: String, success: bool, message: String, public_endpoints: Vec<String>) -> Self {
+    pub fn new(
+        id: String,
+        success: bool,
+        message: String,
+        public_endpoints: Vec<String>,
+    ) -> Self {
         TunnelAck {
             id,
             success,
             message,
-            public_endpoints
+            public_endpoints,
         }
     }
 }

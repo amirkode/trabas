@@ -6,7 +6,7 @@ use common::net::{
 };
 use common::{validate_signature, _error, _info};
 use tokio::net::TcpStream;
-use tokio::time::sleep;
+use tokio::time::{sleep, Instant};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -202,8 +202,9 @@ async fn tunnel_sender_handler(
     tunnel_id: String,
 ) {
     _info!("Tunnel [{}] sender handler started.", tunnel_id.clone());
-    
-    let mut skip = 0;
+
+    let mut last_hc: Option<Instant> = Some(Instant::now());
+    const HC_INTERVAL: u64 = 30; // in seconds
     while !(*handler_stopped.lock().await) {
         // request from the queue
         // TODO: implement Round-robin for multiple tunnels with a single client id
@@ -224,16 +225,14 @@ async fn tunnel_sender_handler(
                 _info!("Request: {} was sent to client: {}.", public_request.id, client_id.clone());
             },
             Err(_) => {
-                skip += 1;
-                // every 20k skips and send health check
-                if skip == 20000 {
+                if last_hc.unwrap().elapsed() > Duration::from_secs(HC_INTERVAL) {
+                    _info!("Sending health check to client after {} seconds...", HC_INTERVAL);
                     let hc = prepare_packet(Vec::from(String::from(HEALTH_CHECK_PACKET_ACK).as_bytes()));
                     if let Err(_) = stream.lock().await.write_all(&hc).await {
                         break;
                     }
-                    // sleep for 100 ms
-                    sleep(Duration::from_millis(100)).await;
-                    skip = 0;
+
+                    last_hc = Some(Instant::now());
                 }
             }
         }
@@ -261,6 +260,8 @@ async fn tunnel_receiver_handler(
 ) {
     _info!("Tunnel [{}] receiver handler started.", tunnel_id.clone());
 
+    let mut last_dc: Option<Instant> = Some(Instant::now());
+    const TIMEOUT: u64 = 30; // in seconds
     while !(*handler_stopped.lock().await) {
         // get latest response from stream
         let mut raw_response = Vec::new();
@@ -271,8 +272,18 @@ async fn tunnel_receiver_handler(
 
         // empty response
         if raw_response.len() == 0 {
-            // TODO: handle break
+            // TODO: get the value from config
+            if last_dc.is_none() {
+                last_dc = Some(Instant::now());
+            } else if last_dc.unwrap().elapsed() > Duration::from_secs(TIMEOUT) {
+                _info!("Connection hung up for {} seconds, stopping receiver handler...", TIMEOUT);
+                // TODO: add health check here
+                break;
+            }
             continue;
+        } else if last_dc.is_some() {
+            // reset
+            last_dc = None;
         }
 
         let packets = separate_packets(raw_response);

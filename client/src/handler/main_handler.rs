@@ -12,11 +12,11 @@ use common::{
         read_bytes_from_socket_for_internal, 
         separate_packets, 
         HttpResponse, 
-        TcpStreamTLS,
+        TcpStreamTLS, HEALTH_CHECK_PACKET_ACK,
     }, 
     security::sign_value
 };
-use tokio::{net::TcpStream, sync::{Mutex, mpsc, mpsc::{Sender, Receiver}}, time::{sleep, Instant}};
+use tokio::{net::TcpStream, sync::{Mutex, mpsc, mpsc::{Sender, Receiver}}, time::{sleep, timeout, Instant}};
 use tokio_native_tls::{native_tls, TlsConnector};
 
 use common::{_error, _info};
@@ -172,7 +172,8 @@ pub async fn tunnel_receiver_handler(
 ) {
     _info!("Tunnel [{}] receiver handler started.", tunnel_id.clone());
 
-    let mut last_dc: Option<Instant> = None;
+    let mut last_dc: Option<Instant> = Some(Instant::now());
+    const TIMEOUT: u64 = 30; // in seconds
     while !(*handler_stopped.lock().await) {
         // get incoming request server service to forward
         let mut request = Vec::new();
@@ -182,17 +183,18 @@ pub async fn tunnel_receiver_handler(
         }
 
         if request.len() == 0 {
-
             // TODO: get the value from config
-            let timeout = 30; // in seconds
             if last_dc.is_none() {
                 last_dc = Some(Instant::now());
-            } else if last_dc.unwrap().elapsed() > Duration::from_secs(timeout) {
-                _info!("Connection hung up for {} seconds, stopping receiver handler...", timeout);
+            } else if last_dc.unwrap().elapsed() > Duration::from_secs(TIMEOUT) {
+                _info!("Connection hung up for {} seconds, stopping receiver handler...", TIMEOUT);
                 // TODO: add health check here
                 break;
             }
             continue;
+        } else if last_dc.is_some() {
+            // reset
+            last_dc = None;
         }
 
         let packets = separate_packets(request);
@@ -240,18 +242,43 @@ pub async fn tunnel_sender_handler(
     tunnel_id: String,
 ) {
     _info!("Tunnel [{}] sender handler started.", tunnel_id.clone());
+    
+    let mut last_hc: Option<Instant> = Some(Instant::now());
+    const HC_INTERVAL: u64 = 30; // in seconds
+    const RECV_INTERVAL: u64 = 5; // in seconds
     while !(*handler_stopped.lock().await) {
         // get ready public responses from the queue
-        if let Some(public_response) = rx.lock().await.recv().await {
-            _info!("Response for request: {} is available.", public_response.request_id);
-            // foward response from underlying service to server service
-            let bytes_res = prepare_packet(to_json_vec(&public_response));
-            if let Err(e) = stream.lock().await.write_all(&bytes_res).await {
-                _error!("{}", e);
+        let recv_result = timeout(Duration::from_secs(RECV_INTERVAL), rx.lock().await.recv()).await;
+        match recv_result {
+            Ok(Some(public_response)) => {
+                _info!("Response for request: {} is available.", public_response.request_id);
+                // foward response from underlying service to server service
+                let bytes_res = prepare_packet(to_json_vec(&public_response));
+                if let Err(e) = stream.lock().await.write_all(&bytes_res).await {
+                    _error!("{}", e);
+                    break;
+                }
+                _info!("Request: {} processed.", public_response.request_id);
+            }
+            Ok(None) => {
+                // channel closed
+                _info!("Response channel closed, stopping sender handler...");
+                break;
+            }
+            Err(_) => {
+                // timeout
+                // do nothing, continue to next iteration
+            }
+        }
+
+        if last_hc.unwrap().elapsed() > Duration::from_secs(HC_INTERVAL) {
+            _info!("Sending health check to server after {} seconds...", HC_INTERVAL);
+            let hc = prepare_packet(Vec::from(String::from(HEALTH_CHECK_PACKET_ACK).as_bytes()));
+            if let Err(_) = stream.lock().await.write_all(&hc).await {
                 break;
             }
 
-            _info!("Request: {} processed.", public_response.request_id);
+            last_hc = Some(Instant::now());
         }
     }
 

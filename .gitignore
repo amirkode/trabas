@@ -2,3 +2,4 @@
 .VSCodeCounter
 # *test.*
 .DS_Store
+*.local

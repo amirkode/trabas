@@ -107,19 +107,24 @@ pub fn prepare_packet(mut data: Vec<u8>) -> Vec<u8> {
     data
 }
 
-pub fn separate_packets(data: Vec<u8>) -> Vec<Vec<u8>> {
+pub fn separate_packets(data: Vec<u8>) -> (Vec<Vec<u8>>, bool) {
     let raw_string = String::from_utf8(data).unwrap();
     let mut res: Vec<Vec<u8>> = Vec::new();
+    let mut contains_health_check = false;
     for packet in raw_string.split(PACKET_SEPARATOR) {
         let trimmed_packet = packet.trim();
-        if trimmed_packet == "" || trimmed_packet == HEALTH_CHECK_PACKET_ACK {
+        if trimmed_packet == "" {
+            continue;
+        }
+        if trimmed_packet == HEALTH_CHECK_PACKET_ACK {
+            contains_health_check = true;
             continue;
         }
         
         res.push(Vec::from(trimmed_packet.as_bytes()));
     }
 
-    res
+    (res, contains_health_check)
 }
 
 // WARNING: this is only use for Trabas: internal Server-Client Connection
@@ -203,7 +208,7 @@ pub async fn read_bytes_from_mutexed_socket_for_internal(stream: Arc<Mutex<TcpSt
 pub async fn read_string_from_socket_for_internal(stream: &mut TcpStreamTLS, res: &mut String) -> Result<(), String> {
     let mut temp = Vec::new();
     read_bytes_from_socket_for_internal(stream, &mut temp).await?;
-    let packets = separate_packets(temp);
+    let (packets, _) = separate_packets(temp);
     if let Some(data) = packets.get(0) {
         *res = String::from_utf8(data.clone()).unwrap();
         return Ok(())

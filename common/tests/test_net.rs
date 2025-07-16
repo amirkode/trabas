@@ -22,7 +22,7 @@ mod tests {
         data.extend(Vec::from(net::HEALTH_CHECK_PACKET_ACK.as_bytes()));
         data.extend(net::prepare_packet(Vec::new()));
 
-        let packets = net::separate_packets(data);
+        let (packets, _) = net::separate_packets(data);
         assert_eq!(packets.len(), 2);
         assert_eq!(packets[0], packet1);
         assert_eq!(packets[1], packet2);

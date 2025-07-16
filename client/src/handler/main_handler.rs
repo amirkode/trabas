@@ -20,12 +20,9 @@ use tokio::{net::TcpStream, sync::{Mutex, mpsc, mpsc::{Sender, Receiver}}, time:
 use tokio_native_tls::{native_tls, TlsConnector};
 
 use common::{_error, _info};
-use common::config::keys as config_keys;
+use common::{config::keys as config_keys};
 use crate::{config::get_ca_certificate, service::underlying_service::UnderlyingService};
-use crate::version::{
-    get_client_version_code,
-    get_min_server_version_code,
-};
+use crate::version::{get_client_version, get_min_server_version};
 
 pub async fn register_handler(underlying_host: String, service: UnderlyingService, use_tls: bool) -> () {
     // initial connection validation for underlying service
@@ -93,7 +90,7 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
             continue;
         }
         
-        let packets = separate_packets(server_response);
+        let (packets, _) = separate_packets(server_response);
         let server_response = match packets.get(0) {
             Some(data) => data,
             None => {
@@ -159,7 +156,7 @@ fn get_tunnel_client() -> TunnelClient {
     let signing_key = std::env::var(config_keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY)
         .expect(format!("{} env has not been set", config_keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY).as_str());
     let signature = sign_value(client_id.clone(), signing_key);
-    TunnelClient::new(client_id, signature, get_client_version_code(), get_min_server_version_code())
+    TunnelClient::new(client_id, signature, get_client_version(), get_min_server_version())
 }
 
 pub async fn tunnel_receiver_handler(
@@ -197,7 +194,10 @@ pub async fn tunnel_receiver_handler(
             last_dc = None;
         }
 
-        let packets = separate_packets(request);
+        let (packets, contains_health_check) = separate_packets(request);
+        if contains_health_check {
+            _info!("Received health check packet from server service.");
+        }
         for packet in packets {
             let public_request: PublicRequest = from_json_slice(&packet).unwrap(); // assuming correct format
             let start_request = Instant::now();
@@ -243,9 +243,10 @@ pub async fn tunnel_sender_handler(
 ) {
     _info!("Tunnel [{}] sender handler started.", tunnel_id.clone());
     
-    let mut last_hc: Option<Instant> = Some(Instant::now());
+    let mut last_hc = Instant::now();
     const HC_INTERVAL: u64 = 30; // in seconds
     const RECV_INTERVAL: u64 = 5; // in seconds
+    const IDLE_SLEEP: u64 = 50; // in milliseconds
     while !(*handler_stopped.lock().await) {
         // get ready public responses from the queue
         let recv_result = timeout(Duration::from_secs(RECV_INTERVAL), rx.lock().await.recv()).await;
@@ -259,6 +260,8 @@ pub async fn tunnel_sender_handler(
                     break;
                 }
                 _info!("Request: {} processed.", public_response.request_id);
+                // reset health check here
+                last_hc = Instant::now();
             }
             Ok(None) => {
                 // channel closed
@@ -267,19 +270,22 @@ pub async fn tunnel_sender_handler(
             }
             Err(_) => {
                 // timeout
-                // do nothing, continue to next iteration
+                // check heath check
+                if last_hc.elapsed() > Duration::from_secs(HC_INTERVAL) {
+                    _info!("Sending health check to server after {} seconds idle...", HC_INTERVAL);
+                    let hc = prepare_packet(Vec::from(String::from(HEALTH_CHECK_PACKET_ACK).as_bytes()));
+                    if let Err(_) = stream.lock().await.write_all(&hc).await {
+                        break;
+                    }
+        
+                    last_hc = Instant::now();
+                }
+
+                // idle sleep
+                sleep(Duration::from_millis(IDLE_SLEEP)).await;
             }
         }
 
-        if last_hc.unwrap().elapsed() > Duration::from_secs(HC_INTERVAL) {
-            _info!("Sending health check to server after {} seconds...", HC_INTERVAL);
-            let hc = prepare_packet(Vec::from(String::from(HEALTH_CHECK_PACKET_ACK).as_bytes()));
-            if let Err(_) = stream.lock().await.write_all(&hc).await {
-                break;
-            }
-
-            last_hc = Some(Instant::now());
-        }
     }
 
     // update handler stop state

@@ -1,20 +1,21 @@
-// the version code is an internal code in integer format
 // NOTE:
-// - Server and client version codes could be different, but they must be compatible.
-// - Increment the version for any change in the module
-pub const CLIENT_VERSION_CODE: usize = 1;
-pub const MIN_SERVER_VERSION_CODE: usize = 1;
+// - Version is the build version of the binary or project.
+// - Server and client versions could be different, but they must be compatible.
 
-pub fn get_client_version_code() -> usize {
-    std::env::var("TEST_CLIENT_VERSION_CODE")
+use common::version::get_root_version;
+
+const MIN_SERVER_VERSION: &str = "0.1.2-rc.0";
+
+pub fn get_client_version() -> String {
+    std::env::var("TEST_CLIENT_VERSION")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(CLIENT_VERSION_CODE)
+        .unwrap_or(get_root_version())
 }
 
-pub fn get_min_server_version_code() -> usize {
-    std::env::var("TEST_MIN_SERVER_VERSION_CODE")
+pub fn get_min_server_version() -> String {
+    std::env::var("TEST_MIN_SERVER_VERSION")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(MIN_SERVER_VERSION_CODE)
+        .unwrap_or(MIN_SERVER_VERSION.to_string())
 }

@@ -5,7 +5,7 @@ use log::{self, LevelFilter};
 use once_cell::sync::Lazy;
 use clap::{error::ErrorKind, CommandFactory, Parser, Subcommand};
 use env_logger::{Env, Builder, Target};
-use common::{_info, config::{init_env_from_config, keys::{CONFIG_KEY_GLOBAL_DEBUG, CONFIG_KEY_GLOBAL_LOG_LIMIT}, set_configs}, logger::StickyLogger};
+use common::{_info, config::{init_env_from_config, keys::{CONFIG_KEY_GLOBAL_DEBUG, CONFIG_KEY_GLOBAL_LOG_LIMIT}, set_configs}, logger::StickyLogger, version::set_root_version};
 use trabas::{PROJECT_NAME, PROJECT_VERSION};
 use ctrlc;
 
@@ -389,6 +389,7 @@ fn init_logger(debug: bool) {
 async fn main() {
     // init env vars
     init_env_from_config();
+    set_root_version(PROJECT_VERSION);
     
     let debug = std::env::var(CONFIG_KEY_GLOBAL_DEBUG).unwrap_or_default() == "true";
 

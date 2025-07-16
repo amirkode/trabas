@@ -18,10 +18,7 @@ use common::data::dto::tunnel_client::TunnelClient;
 use crate::config::ext_keys;
 use crate::service::client_service::ClientService;
 use crate::service::public_service::PublicService;
-use crate::version::{
-    get_server_version_code,
-    get_min_client_version_code,
-};
+use crate::version::{get_server_version, get_min_client_version};
 
 pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientService, public_service: PublicService) -> () {
     let tunnel_id = string::generate_rand_id(32);
@@ -38,7 +35,7 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
         return;
     }
 
-    let packets = separate_packets(raw_response);
+    let (packets, _) = separate_packets(raw_response);
     let raw_response = match packets.get(0) {
         Some(data) => data,
         None => {
@@ -60,18 +57,18 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     };
 
     // validate versions
-    let version_code = get_server_version_code();
-    let min_client_version_code = get_min_client_version_code();
-    if !client.validate_version(version_code, min_client_version_code) {
+    let version = get_server_version();
+    let min_client_version = get_min_client_version();
+    if !client.validate_version(version.clone(), min_client_version.clone()) {
         let tunnel_ack = TunnelAck::new(
             tunnel_id, 
             false, 
             format!(
                 "Version mismatch: Server version code = {} (required ≥ {}) | Client version code = {} (required ≥ {}).",
-                version_code,
-                client.min_sv_version_code,
-                client.cl_version_code,
-                min_client_version_code
+                version.clone(),
+                client.min_sv_version,
+                client.cl_version,
+                min_client_version
             ),
             vec![]);
         let packet = prepare_packet(to_json_vec(&tunnel_ack));
@@ -203,8 +200,9 @@ async fn tunnel_sender_handler(
 ) {
     _info!("Tunnel [{}] sender handler started.", tunnel_id.clone());
 
-    let mut last_hc: Option<Instant> = Some(Instant::now());
+    let mut last_hc = Instant::now();
     const HC_INTERVAL: u64 = 30; // in seconds
+    const IDLE_SLEEP: u64 = 50; // in milliseconds
     while !(*handler_stopped.lock().await) {
         // request from the queue
         // TODO: implement Round-robin for multiple tunnels with a single client id
@@ -223,17 +221,22 @@ async fn tunnel_sender_handler(
                 };
 
                 _info!("Request: {} was sent to client: {}.", public_request.id, client_id.clone());
+                // reset health check here
+                last_hc = Instant::now();
             },
             Err(_) => {
-                if last_hc.unwrap().elapsed() > Duration::from_secs(HC_INTERVAL) {
-                    _info!("Sending health check to client after {} seconds...", HC_INTERVAL);
+                if last_hc.elapsed() > Duration::from_secs(HC_INTERVAL) {
+                    _info!("Sending health check to client service [{}] after {} seconds idle...", client_id, HC_INTERVAL);
                     let hc = prepare_packet(Vec::from(String::from(HEALTH_CHECK_PACKET_ACK).as_bytes()));
                     if let Err(_) = stream.lock().await.write_all(&hc).await {
                         break;
                     }
 
-                    last_hc = Some(Instant::now());
+                    last_hc = Instant::now();
                 }
+
+                // idle sleep
+                sleep(Duration::from_millis(IDLE_SLEEP)).await;
             }
         }
     }
@@ -260,8 +263,9 @@ async fn tunnel_receiver_handler(
 ) {
     _info!("Tunnel [{}] receiver handler started.", tunnel_id.clone());
 
-    let mut last_dc: Option<Instant> = Some(Instant::now());
+    let mut last_received = Instant::now();
     const TIMEOUT: u64 = 30; // in seconds
+    const IDLE_SLEEP: u64 = 50; // in milliseconds
     while !(*handler_stopped.lock().await) {
         // get latest response from stream
         let mut raw_response = Vec::new();
@@ -272,21 +276,21 @@ async fn tunnel_receiver_handler(
 
         // empty response
         if raw_response.len() == 0 {
-            // TODO: get the value from config
-            if last_dc.is_none() {
-                last_dc = Some(Instant::now());
-            } else if last_dc.unwrap().elapsed() > Duration::from_secs(TIMEOUT) {
+            if last_received.elapsed() > Duration::from_secs(TIMEOUT) {
                 _info!("Connection hung up for {} seconds, stopping receiver handler...", TIMEOUT);
-                // TODO: add health check here
                 break;
             }
+            // idle sleep
+            sleep(Duration::from_millis(IDLE_SLEEP)).await;
             continue;
-        } else if last_dc.is_some() {
-            // reset
-            last_dc = None;
         }
 
-        let packets = separate_packets(raw_response);
+        last_received = Instant::now();
+
+        let (packets, contains_health_check) = separate_packets(raw_response);
+        if contains_health_check {
+            _info!("Received health check packet from client service [{}].", client_id);
+        }
         for packet in packets {
             // enqueue Public Response
             let mut response: PublicResponse = match from_json_slice(&packet) {

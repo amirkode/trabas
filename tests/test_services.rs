@@ -21,6 +21,7 @@ mod tests {
         _error, _info,
         config::keys as config_keys,
         data::dto::cache_config::CacheConfig,
+        version::set_root_version,
     };
     use trabas::mocks::{
         client::mock_underlying_repo::MockUnderlyingRepo,
@@ -32,6 +33,7 @@ mod tests {
             mock_response_repo::MockResponseRepo,
         },
     };
+    use trabas::PROJECT_VERSION;
     use server::service::cache_service::CacheService;
 
     async fn send_http_request(url: String, cookies: Option<HashMap<String, String>>) -> Result<Response, String> {
@@ -65,6 +67,7 @@ mod tests {
     fn init_test_env() {
         // to prevent reinitialization
         INIT.call_once(|| {
+            set_root_version(PROJECT_VERSION);
             // mock env/config
             let server_secret = "74657374696e676b6579313233343536";
             env::set_var(String::from(config_keys::CONFIG_KEY_SERVER_SECRET), server_secret);
@@ -606,8 +609,8 @@ mod tests {
         env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY), server_secret);
 
         // set server verison config
-        std::env::set_var("TEST_MIN_CLIENT_VERSION_CODE", "100");
-        std::env::set_var("TEST_SERVER_VERSION_CODE", "100");
+        std::env::set_var("TEST_MIN_CLIENT_VERSION", "1.0.0");
+        std::env::set_var("TEST_SERVER_VERSION", "1.0.0");
 
         // server service
         let cache_repo = Arc::new(MockCacheRepo::new());
@@ -637,8 +640,8 @@ mod tests {
         sleep(Duration::from_secs(2)).await;
 
         // patch the client version to be lower than required
-        env::set_var("TEST_CLIENT_VERSION_CODE", "99");
-        env::set_var("TEST_MIN_SERVER_VERSION_CODE", "100");
+        env::set_var("TEST_CLIENT_VERSION", "0.9.9");
+        env::set_var("TEST_MIN_SERVER_VERSION", "1.0.0");
         env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_ID), "client_incompatible1");
 
         // start the client services
@@ -661,8 +664,8 @@ mod tests {
         sleep(Duration::from_secs(1)).await;
 
         // now, we simulate if the min service version is larger than the server version
-        env::set_var("TEST_CLIENT_VERSION_CODE", "100");
-        env::set_var("TEST_MIN_SERVER_VERSION_CODE", "101");
+        env::set_var("TEST_CLIENT_VERSION", "1.0.0");
+        env::set_var("TEST_MIN_SERVER_VERSION", "1.0.1");
         env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_ID), "client_incompatible2");
 
         let client2_exec = tokio::spawn(async move {
@@ -679,10 +682,10 @@ mod tests {
         assert_eq!(response.unwrap_err(), "Invalid status code");
 
         // reset the version codes, this will fallback to the constants in each module
-        env::set_var("TEST_MIN_CLIENT_VERSION_CODE", "");
-        env::set_var("TEST_SERVER_VERSION_CODE", "");
-        env::set_var("TEST_CLIENT_VERSION_CODE", "");
-        env::set_var("TEST_MIN_SERVER_VERSION_CODE", "");
+        env::set_var("TEST_MIN_CLIENT_VERSION", "");
+        env::set_var("TEST_SERVER_VERSION", "");
+        env::set_var("TEST_CLIENT_VERSION", "");
+        env::set_var("TEST_MIN_SERVER_VERSION", "");
         env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_ID), "client_compatible");
 
         let client3_exec = tokio::spawn(async move {
@@ -702,8 +705,8 @@ mod tests {
             // this should be triggered when the test is run individually
             // since the log capture is set up
             let find = vec![
-                "Version mismatch: Server version code = 100 (required ≥ 100) | Client version code = 99 (required ≥ 100).",
-                "Version mismatch: Server version code = 100 (required ≥ 101) | Client version code = 100 (required ≥ 100).",
+                "Version mismatch: Server version code = 1.0.0 (required ≥ 1.0.0) | Client version code = 0.9.9 (required ≥ 1.0.0).",
+                "Version mismatch: Server version code = 1.0.0 (required ≥ 1.0.1) | Client version code = 1.0.0 (required ≥ 1.0.0).",
                 "Successfully authenticated and registered with the server service."
             ];
             for log in find {

@@ -148,20 +148,20 @@ mod tests {
         let tunnel_client = TunnelClient::new(
             "client_abc123".to_string(),
             "signature_xyz789".to_string(),
-            100,
-            50
+            "1.0.0".to_string(),
+            "0.5.0".to_string()
         );
         let serialized = serde_json::to_string(&tunnel_client).expect("Failed to serialize TunnelClient");
         assert!(serialized.contains("client_abc123"));
         assert!(serialized.contains("signature_xyz789"));
-        assert!(serialized.contains("100"));
-        assert!(serialized.contains("50"));
+        assert!(serialized.contains("1.0.0"));
+        assert!(serialized.contains("0.5.0"));
 
         let deserialized: TunnelClient = serde_json::from_str(&serialized).expect("Failed to deserialize TunnelClient");
         assert_eq!(deserialized.id, tunnel_client.id);
         assert_eq!(deserialized.signature, tunnel_client.signature);
-        assert_eq!(deserialized.cl_version_code, tunnel_client.cl_version_code);
-        assert_eq!(deserialized.min_sv_version_code, tunnel_client.min_sv_version_code);
+        assert_eq!(deserialized.cl_version, tunnel_client.cl_version);
+        assert_eq!(deserialized.min_sv_version, tunnel_client.min_sv_version);
         assert!(!deserialized.alias_id.is_empty());
         assert!(deserialized.conn_dc_at.is_none());
     }
@@ -171,18 +171,18 @@ mod tests {
         let tunnel_client = TunnelClient::new(
             "client_test".to_string(),
             "test_signature".to_string(),
-            100,
-            80
+            "1.0.0".to_string(),
+            "0.8.0".to_string()
         );
 
         // valid version combinations
-        assert!(tunnel_client.validate_version(90, 50)); // server >= min_sv, client >= min_cl
-        assert!(tunnel_client.validate_version(80, 100)); // exact minimum versions
+        assert!(tunnel_client.validate_version("0.9.0".to_string(), "0.5.0".to_string())); // server >= min_sv, client >= min_cl
+        assert!(tunnel_client.validate_version("0.8.0".to_string(), "1.0.0".to_string())); // exact minimum versions
 
         // invalid version combinations  
-        assert!(!tunnel_client.validate_version(70, 50)); // server < min_sv
-        assert!(!tunnel_client.validate_version(90, 150)); // client < min_cl
-        assert!(!tunnel_client.validate_version(70, 150)); // both invalid
+        assert!(!tunnel_client.validate_version("0.7.0".to_string(), "0.5.0".to_string())); // server < min_sv
+        assert!(!tunnel_client.validate_version("0.9.0".to_string(), "1.5.0".to_string())); // client < min_cl
+        assert!(!tunnel_client.validate_version("0.7.0".to_string(), "1.5.0".to_string())); // both invalid
     }
 
     #[test]
@@ -198,8 +198,8 @@ mod tests {
         let deserialized: TunnelClient = serde_json::from_str(json_without_versions)
             .expect("Failed to deserialize TunnelClient with default versions");
         
-        assert_eq!(deserialized.cl_version_code, 0);
-        assert_eq!(deserialized.min_sv_version_code, 0);
+        assert_eq!(deserialized.cl_version, "");
+        assert_eq!(deserialized.min_sv_version, "");
         assert_eq!(deserialized.id, "client_test");
         assert_eq!(deserialized.alias_id, "alias123");
         assert_eq!(deserialized.signature, "test_sig");
@@ -325,7 +325,7 @@ mod tests {
     #[test]
     fn test_tunnel_client_raw_json_deserialization() {
         let raw_json = r#"{
-            "id": "client_raw",
+            "id": "client_raw_test",
             "alias_id": "alias_raw_123",
             "signature": "sig_abc123",
             "conn_est_at": {
@@ -333,18 +333,18 @@ mod tests {
                 "nanos_since_epoch": 0
             },
             "conn_dc_at": null,
-            "cl_version_code": 150,
-            "min_sv_version_code": 75
+            "cl_version": "1.5.0",
+            "min_sv_version": "0.7.5"
         }"#;
 
         let deserialized: TunnelClient = serde_json::from_str(raw_json)
             .expect("Failed to deserialize TunnelClient from raw JSON");
         
-        assert_eq!(deserialized.id, "client_raw");
+        assert_eq!(deserialized.id, "client_raw_test");
         assert_eq!(deserialized.alias_id, "alias_raw_123");
         assert_eq!(deserialized.signature, "sig_abc123");
-        assert_eq!(deserialized.cl_version_code, 150);
-        assert_eq!(deserialized.min_sv_version_code, 75);
+        assert_eq!(deserialized.cl_version, "1.5.0");
+        assert_eq!(deserialized.min_sv_version, "0.7.5");
         assert!(deserialized.conn_dc_at.is_none());
     }
 
@@ -367,8 +367,8 @@ mod tests {
         assert_eq!(deserialized.id, "minimal_client");
         assert_eq!(deserialized.alias_id, "minimal_alias");
         assert_eq!(deserialized.signature, "minimal_sig");
-        assert_eq!(deserialized.cl_version_code, 0); // Should default to 0
-        assert_eq!(deserialized.min_sv_version_code, 0); // Should default to 0
+        assert_eq!(deserialized.cl_version, ""); // Should default to empty string
+        assert_eq!(deserialized.min_sv_version, ""); // Should default to empty string
         assert!(deserialized.conn_dc_at.is_none());
     }
 
@@ -386,8 +386,8 @@ mod tests {
                 "secs_since_epoch": 1640999800,
                 "nanos_since_epoch": 0
             },
-            "cl_version_code": 200,
-            "min_sv_version_code": 100
+            "cl_version": "2.0.0",
+            "min_sv_version": "1.0.0"
         }"#;
 
         let deserialized: TunnelClient = serde_json::from_str(raw_json)
@@ -424,7 +424,7 @@ mod tests {
         let disconnect_time = deserialized.conn_dc_at.unwrap();
         let expected_disconnect = UNIX_EPOCH + std::time::Duration::from_secs(1640999800);
         assert_eq!(disconnect_time, expected_disconnect);
-        assert_eq!(deserialized.cl_version_code, 0);
-        assert_eq!(deserialized.min_sv_version_code, 0);
+        assert_eq!(deserialized.cl_version, "");
+        assert_eq!(deserialized.min_sv_version, "");
     }
 }

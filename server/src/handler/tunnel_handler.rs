@@ -343,13 +343,15 @@ async fn tunnel_receiver_handler(
 async fn check_client_validity_handler(
     handler_stopped: Arc<Mutex<bool>>,
     client_service: Arc<Mutex<ClientService>>,
-    id: String,
+    client_id: String,
     tunnel_id: String,
 ) {
-    _info!("Client [{}] validity check for Tunnel [{}] handler started.", id.clone(), tunnel_id.clone());
+    _info!("Client [{}] validity check for Tunnel [{}] handler started.", client_id.clone(), tunnel_id.clone());
     const IDLE_SLEEP: u64 = 1000; // in milliseconds
+    let mut of_invalid = false;
     while !(*handler_stopped.lock().await) {
-        if let Err(_) = client_service.lock().await.check_client_validity(id.clone()).await {
+        if let Err(_) = client_service.lock().await.check_client_validity(client_id.clone()).await {
+            of_invalid = true;
             break;
         };
         // idle sleep
@@ -358,6 +360,11 @@ async fn check_client_validity_handler(
 
     // update handler stop state
     (*handler_stopped.lock().await) = true;
-
-    _error!("Client [{}] invalid or inactive. Stopping Tunnel [{}]...", id, tunnel_id);
+    if of_invalid {
+        // we don't need to disconnect the client here
+        // since, it's already disconnected
+        _error!("Client [{}] invalid or inactive. Stopping Tunnel [{}]...", client_id, tunnel_id);
+    }
+        
+    _info!("Client [{}] validity check for Tunnel [{}] handler stopped.", client_id.clone(), tunnel_id.clone());
 }

@@ -131,10 +131,13 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         let handler_stopped1 = Arc::new(Mutex::new(false));
         let handler_stopped2 = handler_stopped1.clone();
 
-        // spawn handlers
         let cloned_underlying_host = underlying_host.clone();
         let cloned_service = service.clone();
         let cloned_tunnel_id = ack.id.clone();
+
+        // spawn handlers
+        // to prevent deadlocks, any lock should be acquired
+        // inside a minimal scope
         let receiver_handler = tokio::spawn(async move {
             tunnel_receiver_handler(handler_stopped1, read_stream_mutex, tx_mutex, cloned_underlying_host, cloned_service, cloned_tunnel_id).await;
         });
@@ -169,8 +172,9 @@ pub async fn tunnel_receiver_handler(
 ) {
     _info!("Tunnel [{}] receiver handler started.", tunnel_id.clone());
 
-    let mut last_dc: Option<Instant> = Some(Instant::now());
+    let mut last_received = Instant::now();
     const TIMEOUT: u64 = 30; // in seconds
+    const IDLE_SLEEP: u64 = 50; // in milliseconds
     while !(*handler_stopped.lock().await) {
         // get incoming request server service to forward
         let mut request = Vec::new();
@@ -180,19 +184,16 @@ pub async fn tunnel_receiver_handler(
         }
 
         if request.len() == 0 {
-            // TODO: get the value from config
-            if last_dc.is_none() {
-                last_dc = Some(Instant::now());
-            } else if last_dc.unwrap().elapsed() > Duration::from_secs(TIMEOUT) {
+            if last_received.elapsed() > Duration::from_secs(TIMEOUT) {
                 _info!("Connection hung up for {} seconds, stopping receiver handler...", TIMEOUT);
-                // TODO: add health check here
                 break;
             }
+            // idle sleep
+            sleep(Duration::from_millis(IDLE_SLEEP)).await;
             continue;
-        } else if last_dc.is_some() {
-            // reset
-            last_dc = None;
         }
+        
+        last_received = Instant::now();
 
         let (packets, contains_health_check) = separate_packets(request);
         if contains_health_check {
@@ -229,8 +230,10 @@ pub async fn tunnel_receiver_handler(
         }
     }
 
-    // update handler stop state
-    (*handler_stopped.lock().await) = true;
+    {
+        let mut stopped = handler_stopped.lock().await;
+        *stopped = true;
+    }
 
     _info!("Tunnel [{}] receiver handler stopped.", tunnel_id);
 }
@@ -249,16 +252,25 @@ pub async fn tunnel_sender_handler(
     const IDLE_SLEEP: u64 = 50; // in milliseconds
     while !(*handler_stopped.lock().await) {
         // get ready public responses from the queue
-        let recv_result = timeout(Duration::from_secs(RECV_INTERVAL), rx.lock().await.recv()).await;
-        match recv_result {
+        let recv_res = {
+            timeout(Duration::from_secs(RECV_INTERVAL), rx.lock().await.recv()).await
+        };
+        
+        match recv_res {
             Ok(Some(public_response)) => {
                 _info!("Response for request: {} is available.", public_response.request_id);
-                // foward response from underlying service to server service
+                
                 let bytes_res = prepare_packet(to_json_vec(&public_response));
-                if let Err(e) = stream.lock().await.write_all(&bytes_res).await {
+                // forward response from underlying service to server service
+                let write_res = {
+                    stream.lock().await.write_all(&bytes_res).await
+                };
+                
+                if let Err(e) = write_res {
                     _error!("{}", e);
                     break;
                 }
+                
                 _info!("Request: {} processed.", public_response.request_id);
                 // reset health check here
                 last_hc = Instant::now();
@@ -270,11 +282,15 @@ pub async fn tunnel_sender_handler(
             }
             Err(_) => {
                 // timeout
-                // check heath check
+                // check health check
                 if last_hc.elapsed() > Duration::from_secs(HC_INTERVAL) {
                     _info!("Sending health check to server after {} seconds idle...", HC_INTERVAL);
                     let hc = prepare_packet(Vec::from(String::from(HEALTH_CHECK_PACKET_ACK).as_bytes()));
-                    if let Err(_) = stream.lock().await.write_all(&hc).await {
+                    let hc_res = {
+                        stream.lock().await.write_all(&hc).await
+                    };
+                    
+                    if hc_res.is_err() {
                         break;
                     }
         
@@ -288,8 +304,10 @@ pub async fn tunnel_sender_handler(
 
     }
 
-    // update handler stop state
-    (*handler_stopped.lock().await) = true;
+    {
+        let mut stopped = handler_stopped.lock().await;
+        *stopped = true;
+    }
 
     _info!("Tunnel [{}] sender handler stopped.", tunnel_id);
 }

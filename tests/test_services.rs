@@ -530,6 +530,7 @@ mod tests {
         let underlying_repo1 = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), Arc::new(StdMutex::new(|| {}))));
         let underlying_repo2 = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), Arc::new(StdMutex::new(|| {}))));
         let underlying_repo3 = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), Arc::new(StdMutex::new(|| {}))));
+        let underlying_repo4 = Arc::new(MockUnderlyingRepo::new(mock_response.clone(), Arc::new(StdMutex::new(|| {}))));
         let use_tls = false;
 
         // set client id
@@ -539,30 +540,26 @@ mod tests {
         let client_tunnel1_exec = tokio::spawn(async move {
             client::serve(String::from("The target underlying address, This has no effect"), underlying_repo1, use_tls).await;
         });
-
-        // delay for 2 seconds to wait the client tunnel 1 to start up
-        sleep(Duration::from_secs(2)).await;
-
         let client_tunnel2_exec = tokio::spawn(async move {
             client::serve(String::from("The target underlying address, This has no effect"), underlying_repo2, use_tls).await;
         });
-
-        // delay for 2 seconds to wait the client tunnel 2 to start up
-        sleep(Duration::from_secs(2)).await;
-
-        let client_tunnel3_exec = tokio::spawn(async move {
+        let client_tunnel3_exec  = tokio::spawn(async move {
             client::serve(String::from("The target underlying address, This has no effect"), underlying_repo3, use_tls).await;
         });
+        let client_tunnel4_exec = tokio::spawn(async move {
+            client::serve(String::from("The target underlying address, This has no effect"), underlying_repo4, use_tls).await;
+        });
 
-        // delay for 2 seconds to wait the client tunnel 3 to start up
-        sleep(Duration::from_secs(2)).await;
+        // delay for 5 seconds for all tunnels to start up
+        sleep(Duration::from_secs(5)).await;
 
         // test hit to server public service, 
         // it should return the mock reponse client service
         let url = String::from("http://127.0.0.1:3333/shared_client_id/ping");
         // disptach 20 requests
         let mut tunnel_ids: HashSet<String> = HashSet::new();
-        for _ in 0..20 {
+        let request_cnt = 20;
+        for _ in 0..request_cnt {
             let response = match send_http_request(url.clone(), None).await {
                 Ok(res) => {
                     let tunnel_id = res.headers().get("trabas_tunnel_id")
@@ -584,13 +581,14 @@ mod tests {
 
         _info!("Tunnel IDs: {:?}", tunnel_ids);
 
-        assert_eq!(tunnel_ids.len(), 3);
+        assert_eq!(tunnel_ids.len(), 4);
 
         // abort all services
         server_exec.abort();
         client_tunnel1_exec.abort();
         client_tunnel2_exec.abort();
         client_tunnel3_exec.abort();
+        client_tunnel4_exec.abort();
 
         // TODO: add more relevant assertions
     }

@@ -130,6 +130,16 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     let handler_stopped2 = handler_stopped1.clone();
     let handler_stopped3 = handler_stopped1.clone();
 
+    // tunnel count with the same client id
+    let tunnel_cnt1 = Arc::new(Mutex::new(0));
+    let tunnel_cnt2 = tunnel_cnt1.clone();
+
+    // init tunnel count
+    {
+        let mut tunnel_cnt = tunnel_cnt1.lock().await;
+        *tunnel_cnt = client_service_arc1.lock().await.get_tunnel_count(client_id.clone()).await;
+    }
+
     // client ids for each handler
     let client_id1 = client_id.clone();
     let client_id2 = client_id.clone();
@@ -141,9 +151,16 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     let tunnel_id3 = tunnel_id2.clone();
 
     // spawn handlers
+    // to prevent deadlocks, any lock should be acquired
+    // inside a minimal scope, why?
+    // because, currently there's a potential deadlock where
+    // the ordering of locks is opposite in the sender and receiver handlers
+    // Sender: public_service -> stream
+    // Receiver: stream -> public_service
     tokio::spawn(async move {
         tunnel_sender_handler(
             handler_stopped1, 
+            tunnel_cnt1,
             write_stream_arc, 
             public_service_arc1,
             client_service_arc1, 
@@ -161,7 +178,8 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     });
     tokio::spawn(async move {
         check_client_validity_handler(
-            handler_stopped3, 
+            handler_stopped3,
+            tunnel_cnt2, 
             client_service_arc3, 
             client_id3, 
             tunnel_id3).await;
@@ -203,6 +221,7 @@ fn validate_signature(signature: String, client_id: String) -> bool {
 //                        But, we need to manage it efficiently to avoid any overheads.
 async fn tunnel_sender_handler(
     handler_stopped: Arc<Mutex<bool>>,
+    tunnel_count: Arc<Mutex<i64>>,
     stream: Arc<Mutex<TcpStreamTLS>>, 
     public_service: Arc<Mutex<PublicService>>, 
     client_service: Arc<Mutex<ClientService>>, 
@@ -214,52 +233,100 @@ async fn tunnel_sender_handler(
     let mut last_hc = Instant::now();
     const HC_INTERVAL: u64 = 30; // in seconds
     const IDLE_SLEEP: u64 = 50; // in milliseconds
+    const MIN_IDLE_SLEEP: u64 = 5; // in milliseconds
     while !(*handler_stopped.lock().await) {
+        // check current tunnel count
+        let curr_tunnel_count = {
+            let tunnel_count = tunnel_count.lock().await;
+            *tunnel_count
+        };
+
+        // make sure of tunnel distribution by dynamically adjusting idle sleep
+        // based on the current tunnel count
+        // TODO: review
+        // this should simulate Round-robin for multiple tunnels with a single client id
+        // despite it's not a strict round-robin, it should be enough
+        let acquired_idle_sleep = if curr_tunnel_count > 1 {
+            MIN_IDLE_SLEEP * (curr_tunnel_count as u64)
+        } else {
+            0
+        };
+        let not_acquired_idle_sleep = if curr_tunnel_count > 1 {
+            MIN_IDLE_SLEEP
+        } else {
+            IDLE_SLEEP
+        };
+        
         // request from the queue
-        // TODO: implement Round-robin for multiple tunnels with a single client id
-        match public_service.lock().await.dequeue_request(client_id.clone()).await {
-            Ok(public_request) => {
+        let public_request_opt = {
+            public_service.lock().await.dequeue_request(client_id.clone()).await.ok()
+        };
+        
+        match public_request_opt {
+            Some(public_request) => {
                 _info!("Request [{}] was acquired by tunnel [{}]", public_request.id.clone(), tunnel_id.clone());
                 
                 // send request to client service
                 let bytes_req = prepare_packet(to_json_vec(&public_request.clone()));
-                let _ = match stream.lock().await.write_all(&bytes_req).await {
-                    Ok(ok) => ok,
+                let write_res = {
+                    stream.lock().await.write_all(&bytes_req).await
+                };
+                
+                match write_res {
+                    Ok(_) => {
+                        _info!("Request: {} was sent to client: {}.", public_request.id, client_id.clone());
+                        // reset health check here
+                        last_hc = Instant::now();
+                    },
                     Err(err) => {
-                       _error!("Error sending request [{}] to client [{}]: {}", public_request.id, client_id, err);
+                        _error!("Error sending request [{}] to client [{}]: {}", public_request.id, client_id, err);
                         break;
                     }
-                };
+                }
 
-                _info!("Request: {} was sent to client: {}.", public_request.id, client_id.clone());
-                // reset health check here
-                last_hc = Instant::now();
+                // even we successfully acquired a request
+                // perform idle sleep anyway, give other tunnels a chance to process
+                // (in case of multiple tunnels with a single client id)
+                sleep(Duration::from_millis(acquired_idle_sleep)).await;
             },
-            Err(_) => {
+            None => {
                 if last_hc.elapsed() > Duration::from_secs(HC_INTERVAL) {
                     _info!("Sending health check to client service [{}] after {} seconds idle...", client_id, HC_INTERVAL);
                     let hc = prepare_packet(Vec::from(String::from(HEALTH_CHECK_PACKET_ACK).as_bytes()));
-                    if let Err(_) = stream.lock().await.write_all(&hc).await {
+                    let hc_res = {
+                        stream.lock().await.write_all(&hc).await
+                    };
+                    
+                    if hc_res.is_err() {
                         break;
                     }
 
                     last_hc = Instant::now();
                 }
-
-                // idle sleep
-                sleep(Duration::from_millis(IDLE_SLEEP)).await;
+                
+                sleep(Duration::from_millis(not_acquired_idle_sleep)).await;
             }
         }
     }
 
-    if !(*handler_stopped.lock().await) {
-        // disconnect client
-        client_service.lock().await.disconnect_client(client_id.clone(), tunnel_id.clone()).await.unwrap();
-        _info!("Client Disconnected. client_id: {}, tunnel_id: {}.", client_id, tunnel_id.clone());
-    }
+    let client_dc = {
+        let mut stopped = handler_stopped.lock().await;
+        if !*stopped {
+            *stopped = true;
+            true 
+        } else {
+            false
+        }
+    };
 
-    // update handler stop state
-    (*handler_stopped.lock().await) = true;
+    if client_dc {
+        // disconnect client
+        if let Err(e) = client_service.lock().await.disconnect_client(client_id.clone(), tunnel_id.clone()).await {
+            _error!("Error disconnecting client [{}] tunnel [{}]: {}", client_id, tunnel_id, e);
+        } else {
+            _info!("Client Disconnected. client_id: {}, tunnel_id: {}.", client_id, tunnel_id.clone());
+        }
+    }
 
     _info!("Tunnel [{}] sender handler stopped.", tunnel_id);
 }
@@ -311,10 +378,13 @@ async fn tunnel_receiver_handler(
                 }
             };
 
-            // aassign tunnel_id to response
+            // assign tunnel_id to response
             response.tunnel_id = tunnel_id.clone();
-
-            if let Err(msg) = public_service.lock().await.assign_response(client_id.clone(), response.clone()).await {
+            let assign_res = {
+                public_service.lock().await.assign_response(client_id.clone(), response.clone()).await
+            };
+            
+            if let Err(msg) = assign_res {
                 _error!("{}", msg);
                 continue;
             }
@@ -323,14 +393,24 @@ async fn tunnel_receiver_handler(
         }
     }
 
-    if !(*handler_stopped.lock().await) {
-        // disconnect client
-        client_service.lock().await.disconnect_client(client_id.clone(), tunnel_id.clone()).await.unwrap();
-        _info!("Client Disconnected. client_id: {}, tunnel_id: {}", client_id, tunnel_id.clone());
-    }
+    let client_dc = {
+        let mut stopped = handler_stopped.lock().await;
+        if !*stopped {
+            *stopped = true;
+            true
+        } else {
+            false 
+        }
+    };
 
-    // update handler stop state
-    (*handler_stopped.lock().await) = true;
+    if client_dc {
+        // disconnect client
+        if let Err(e) = client_service.lock().await.disconnect_client(client_id.clone(), tunnel_id.clone()).await {
+            _error!("Error disconnecting client [{}] tunnel [{}]: {}", client_id, tunnel_id, e);
+        } else {
+            _info!("Client Disconnected. client_id: {}, tunnel_id: {}", client_id, tunnel_id.clone());
+        }
+    }
 
     _info!("Tunnel [{}] receiver handler stopped.", tunnel_id);
 }
@@ -342,6 +422,7 @@ async fn tunnel_receiver_handler(
 // TODO: might write last checked timestamp for each tunnel id
 async fn check_client_validity_handler(
     handler_stopped: Arc<Mutex<bool>>,
+    tunnel_count: Arc<Mutex<i64>>,
     client_service: Arc<Mutex<ClientService>>,
     client_id: String,
     tunnel_id: String,
@@ -350,21 +431,33 @@ async fn check_client_validity_handler(
     const IDLE_SLEEP: u64 = 1000; // in milliseconds
     let mut of_invalid = false;
     while !(*handler_stopped.lock().await) {
-        if let Err(_) = client_service.lock().await.check_client_validity(client_id.clone()).await {
+        let curr_tunnel_count = {
+            // check from client service
+            client_service.lock().await.get_tunnel_count(client_id.clone()).await
+        };
+        if curr_tunnel_count <= 0 {
             of_invalid = true;
             break;
-        };
+        }
+        // update tunnel count
+        {
+            let mut tunnel_count = tunnel_count.lock().await;
+            *tunnel_count = curr_tunnel_count;
+        }
         // idle sleep
         sleep(Duration::from_millis(IDLE_SLEEP)).await;
     }
 
-    // update handler stop state
-    (*handler_stopped.lock().await) = true;
+    {
+        let mut stopped = handler_stopped.lock().await;
+        *stopped = true;
+    }
+    
     if of_invalid {
         // we don't need to disconnect the client here
         // since, it's already disconnected
         _error!("Client [{}] invalid or inactive. Stopping Tunnel [{}]...", client_id, tunnel_id);
     }
-        
+    
     _info!("Client [{}] validity check for Tunnel [{}] handler stopped.", client_id.clone(), tunnel_id.clone());
 }

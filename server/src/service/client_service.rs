@@ -60,4 +60,11 @@ impl ClientService {
 
         Err(String::from("Client invalid or inactive"))
     }
+
+    pub async fn get_tunnel_count(&self, client_id: String) -> i64 {
+        match self.client_repo.get_connection_count(client_id).await {
+            Ok(count) => count,
+            Err(_) => 0,
+        }
+    }
 }

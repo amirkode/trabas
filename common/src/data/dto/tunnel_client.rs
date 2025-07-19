@@ -19,6 +19,9 @@ pub struct TunnelClient {
     // connection establied at
     pub conn_est_at: SystemTime,
     // connection disconnected at
+    // # Deprecation Warning
+    // This field is deprecated and might be removed in the future.
+    #[serde(default)]
     pub conn_dc_at: Option<SystemTime>,
 }
 

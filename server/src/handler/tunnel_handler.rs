@@ -114,27 +114,31 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
     // sleep for 1.5 seconds to prevent race condition with healthcheck packet
     sleep(Duration::from_millis(1500)).await;
 
-    client_service.register_client(client).await.unwrap();
+    client_service.register_client(client, tunnel_id.clone()).await.unwrap();
 
     // isolate stream and service inside Arc
     let read_stream_arc = Arc::new(Mutex::new(read_stream));
     let write_stream_arc = Arc::new(Mutex::new(write_stream));
     let client_service_arc1 = Arc::new(Mutex::new(client_service));
     let client_service_arc2 = client_service_arc1.clone();
+    let client_service_arc3 = client_service_arc1.clone();
     let public_service_arc1 = Arc::new(Mutex::new(public_service));
     let public_service_arc2 = public_service_arc1.clone();
 
     // share handler stop state between sender and reciever
     let handler_stopped1 = Arc::new(Mutex::new(false));
     let handler_stopped2 = handler_stopped1.clone();
+    let handler_stopped3 = handler_stopped1.clone();
 
     // client ids for each handler
     let client_id1 = client_id.clone();
     let client_id2 = client_id.clone();
+    let client_id3 = client_id.clone();
 
     // tunnel ids for each handler
     let tunnel_id1 = tunnel_id;
     let tunnel_id2 = tunnel_id1.clone();
+    let tunnel_id3 = tunnel_id2.clone();
 
     // spawn handlers
     tokio::spawn(async move {
@@ -154,6 +158,13 @@ pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientSe
             client_service_arc2, 
             client_id2, 
             tunnel_id2).await;
+    });
+    tokio::spawn(async move {
+        check_client_validity_handler(
+            handler_stopped3, 
+            client_service_arc3, 
+            client_id3, 
+            tunnel_id3).await;
     });
 }
 
@@ -243,7 +254,7 @@ async fn tunnel_sender_handler(
 
     if !(*handler_stopped.lock().await) {
         // disconnect client
-        client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
+        client_service.lock().await.disconnect_client(client_id.clone(), tunnel_id.clone()).await.unwrap();
         _info!("Client Disconnected. client_id: {}, tunnel_id: {}.", client_id, tunnel_id.clone());
     }
 
@@ -314,7 +325,7 @@ async fn tunnel_receiver_handler(
 
     if !(*handler_stopped.lock().await) {
         // disconnect client
-        client_service.lock().await.disconnect_client(client_id.clone()).await.unwrap();
+        client_service.lock().await.disconnect_client(client_id.clone(), tunnel_id.clone()).await.unwrap();
         _info!("Client Disconnected. client_id: {}, tunnel_id: {}", client_id, tunnel_id.clone());
     }
 
@@ -322,4 +333,31 @@ async fn tunnel_receiver_handler(
     (*handler_stopped.lock().await) = true;
 
     _info!("Tunnel [{}] receiver handler stopped.", tunnel_id);
+}
+
+// to make sure of the client validity
+// where this is required in the public request
+// if it's invalid, just break the tunnel
+// let the client restart itself
+// TODO: might write last checked timestamp for each tunnel id
+async fn check_client_validity_handler(
+    handler_stopped: Arc<Mutex<bool>>,
+    client_service: Arc<Mutex<ClientService>>,
+    id: String,
+    tunnel_id: String,
+) {
+    _info!("Client [{}] validity check for Tunnel [{}] handler started.", id.clone(), tunnel_id.clone());
+    const IDLE_SLEEP: u64 = 1000; // in milliseconds
+    while !(*handler_stopped.lock().await) {
+        if let Err(_) = client_service.lock().await.check_client_validity(id.clone()).await {
+            break;
+        };
+        // idle sleep
+        sleep(Duration::from_millis(IDLE_SLEEP)).await;
+    }
+
+    // update handler stop state
+    (*handler_stopped.lock().await) = true;
+
+    _error!("Client [{}] invalid or inactive. Stopping Tunnel [{}]...", id, tunnel_id);
 }

@@ -11,7 +11,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  common-tests:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,3 +22,5 @@ jobs:
       run: cargo test --verbose -- --test-threads=1 --nocapture
     - name: Run "common" package tests
       run: cargo test --package common --verbose -- --test-threads=1 --nocapture
+
+  # TODO: simulate integration tests, e.g. run a server with redis

@@ -1,6 +1,6 @@
-use std::{sync::Arc, time::SystemTime};
+use std::{sync::Arc};
 
-use common::data::dto::tunnel_client::TunnelClient;
+use common::{data::dto::tunnel_client::TunnelClient};
 use crate::data::repository::client_repo::ClientRepo;
 
 #[derive(Clone)]
@@ -16,45 +16,46 @@ impl ClientService {
     // register new client ID
     // if the new tunneling client attempts to connect
     // the client ID will be cached 
-    pub async fn register_client(&self, client: TunnelClient) -> Result<(), String> {
-        // remove previous alias if exists
-        if let Ok(c) = self.client_repo.get(client.id.clone()).await {
-            self.client_repo.remove_alias(c.alias_id).await?;
-        }
-        // set alias
-        self.client_repo.create_alias(client.alias_id.clone(), client.id.clone()).await?;
+    pub async fn register_client(&self, client: TunnelClient, tunnel_id: String) -> Result<(), String> {
+        let client_id = client.id.clone();
+        let alias_id = client.alias_id.clone();
         // save to client information to redis store
-        self.client_repo.create(client).await
+        self.client_repo.create(client.clone(), tunnel_id).await?;
+        // set alias
+        self.client_repo.create_alias(alias_id, client_id.clone()).await?;
+        Ok(())
     }
 
-    pub async fn disconnect_client(&self, id: String) -> Result<(), String> {
-        let mut client = self.client_repo.get(id).await?;
-        // set disconnection timestamp to now
-        client.conn_dc_at = Option::from(SystemTime::now());
-        // update entire data
-        self.client_repo.create(client).await
+    pub async fn disconnect_client(&self, id: String, tunnel_id: String) -> Result<(), String> {
+        let client = self.client_repo.get(id, tunnel_id.clone()).await?;
+        // remove the alias
+        self.client_repo.remove_alias(client.alias_id.clone()).await?;
+        // remove the client
+        self.client_repo.remove(client.id.clone(), tunnel_id).await
     }
 
     pub async fn check_client_validity(&self, id: String) -> Result<String, String> {
-        let rec: Option<TunnelClient> = match self.client_repo.get(id.clone()).await {
-            Ok(value) => Some(value),
+        let mut client_id = id.clone();
+        let conn_cnt: i64 = match self.client_repo.get_connection_count(id.clone()).await {
+            Ok(value) => value,
             Err(_) => {
                 // check again in alias map
-                let res: Option<TunnelClient> = match self.client_repo.get_id_by_alias(id).await {
-                    Ok(id) => match self.client_repo.get(id).await {
-                        Ok(value) => Some(value),
-                        Err(_) => None
+                let res: i64 = match self.client_repo.get_id_by_alias(id).await {
+                    Ok(id) => match self.client_repo.get_connection_count(id.clone()).await {
+                        Ok(value) => {
+                            client_id = id;
+                            value
+                        },
+                        Err(_) => 0
                     },
-                    Err(_) => None
+                    Err(_) => 0
                 };
                 res
             }
         };
 
-        if let Some(rec) = rec {
-            if rec.conn_dc_at == None {
-                return Ok(rec.id);
-            }
+        if conn_cnt > 0 {
+            return Ok(client_id);
         }
 
         Err(String::from("Client invalid or inactive"))

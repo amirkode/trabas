@@ -36,23 +36,24 @@ impl ClientService {
 
     pub async fn check_client_validity(&self, id: String) -> Result<String, String> {
         let mut client_id = id.clone();
-        let conn_cnt: i64 = match self.client_repo.get_connection_count(id.clone()).await {
+        let mut conn_cnt: i64 = match self.client_repo.get_connection_count(id.clone()).await {
             Ok(value) => value,
-            Err(_) => {
-                // check again in alias map
-                let res: i64 = match self.client_repo.get_id_by_alias(id).await {
-                    Ok(id) => match self.client_repo.get_connection_count(id.clone()).await {
-                        Ok(value) => {
-                            client_id = id;
-                            value
-                        },
-                        Err(_) => 0
+            Err(_) => 0
+        };
+        if conn_cnt < 1 {
+            // check again in alias map
+            let res: i64 = match self.client_repo.get_id_by_alias(id).await {
+                Ok(id) => match self.client_repo.get_connection_count(id.clone()).await {
+                    Ok(value) => {
+                        client_id = id;
+                        value
                     },
                     Err(_) => 0
-                };
-                res
-            }
-        };
+                },
+                Err(_) => 0
+            };
+            conn_cnt = res;
+        }
 
         if conn_cnt > 0 {
             return Ok(client_id);

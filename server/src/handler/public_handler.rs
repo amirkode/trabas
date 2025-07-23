@@ -100,7 +100,7 @@ async fn public_handler(
         }
     };
 
-    // chek whether client is active
+    // check whether client is active
     let client_id = match client_service.check_client_validity(client_id).await {
         Ok(value) => value,
         Err(msg) => {

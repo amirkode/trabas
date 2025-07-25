@@ -32,7 +32,7 @@ error() {
 
 # Create workspace directory
 log "Creating workspace directory: $WORKSPACE_DIR"
-mkdir -p "$WORKSPACE_DIR/trabas_config"
+mkdir -p "$WORKSPACE_DIR"
 
 # Verify binary exists
 if [ ! -f "$TRABAS_BINARY" ]; then
@@ -46,7 +46,14 @@ log "Using Trabas binary: $TRABAS_BINARY"
 # Make binary executable
 chmod +x "$TRABAS_BINARY"
 
-# Change to workspace directory
+# Get the directory where the binary is located (this is where trabas_config will be created)
+BINARY_DIR=$(dirname "$TRABAS_BINARY")
+CONFIG_DIR="$BINARY_DIR/trabas_config"
+CONFIG_FILE="$CONFIG_DIR/.env"
+
+log "Config will be created at: $CONFIG_DIR"
+
+# Change to workspace directory for running commands
 cd "$WORKSPACE_DIR"
 
 # Generate server configuration
@@ -57,10 +64,19 @@ log "Generating server configuration..."
     --redis-enable false \
     --force
 
-# Extract the generated secret
-SERVER_SECRET=$(cat trabas_config/.env | grep SV_SECRET | cut -d'=' -f2)
+# Extract the generated secret from the correct location
+if [ ! -f "$CONFIG_FILE" ]; then
+    error "Config file not found at: $CONFIG_FILE"
+    error "Available files in config directory:"
+    ls -la "$CONFIG_DIR" 2>/dev/null || echo "Config directory does not exist"
+    exit 1
+fi
+
+SERVER_SECRET=$(cat "$CONFIG_FILE" | grep SV_SECRET | cut -d'=' -f2)
 if [ -z "$SERVER_SECRET" ]; then
-    error "Failed to generate server secret"
+    error "Failed to extract server secret from: $CONFIG_FILE"
+    error "Config file contents:"
+    cat "$CONFIG_FILE"
     exit 1
 fi
 
@@ -77,7 +93,7 @@ log "Generating client configuration..."
 
 # Show generated configuration
 log "Generated configuration:"
-cat trabas_config/.env
+cat "$CONFIG_FILE"
 
 # Start mock server
 log "Starting mock server on port $MOCK_SERVER_PORT..."

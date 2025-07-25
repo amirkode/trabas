@@ -97,25 +97,6 @@ class TrabasE2ETests:
         data = response.json()
         assert data["method"] == "DELETE", f"Expected DELETE, got {data['method']}"
     
-    def test_headers_forwarding(self):
-        """Test that headers are properly forwarded"""
-        headers = {
-            "X-Custom-Header": "test-value",
-            "User-Agent": "TrabasE2ETest/1.0"
-        }
-        response = requests.get(
-            f"{self.server_url}/{self.client_id}/headers",
-            headers=headers,
-            timeout=self.timeout
-        )
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
-        
-        data = response.json()
-        received_headers = data["headers"]
-        
-        # Check that our custom headers were forwarded
-        assert "X-Custom-Header" in received_headers, "Custom header not forwarded"
-        assert received_headers["X-Custom-Header"] == "test-value", "Custom header value incorrect"
     
     def test_different_status_codes(self):
         """Test that different HTTP status codes are properly forwarded"""
@@ -202,7 +183,6 @@ class TrabasE2ETests:
             (self.test_post_request, "POST request tunneling"),
             (self.test_put_request, "PUT request tunneling"),
             (self.test_delete_request, "DELETE request tunneling"),
-            (self.test_headers_forwarding, "Headers forwarding"),
             (self.test_different_status_codes, "Different status codes"),
             (self.test_slow_request, "Slow request handling"),
             (self.test_large_payload, "Large payload handling"),

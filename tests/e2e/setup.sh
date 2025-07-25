@@ -77,6 +77,9 @@ log "Generating server configuration..."
     --redis-enable false \
     --force
 
+# Set GLOBAL_DEBUG to true in the config file
+echo "GLOBAL_DEBUG=true" >> "$CONFIG_FILE"
+
 # Extract the generated secret from the correct location
 if [ ! -f "$CONFIG_FILE" ]; then
     error "Config file not found at: $CONFIG_FILE"

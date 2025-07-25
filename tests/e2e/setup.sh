@@ -51,7 +51,20 @@ BINARY_DIR=$(dirname "$TRABAS_BINARY")
 CONFIG_DIR="$BINARY_DIR/trabas_config"
 CONFIG_FILE="$CONFIG_DIR/.env"
 
+# Get the project root directory (where the tests/e2e directory is located)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+MOCK_SERVER_SCRIPT="$SCRIPT_DIR/mock_server.py"
+
 log "Config will be created at: $CONFIG_DIR"
+log "Project root: $PROJECT_ROOT"
+log "Mock server script: $MOCK_SERVER_SCRIPT"
+
+# Verify mock server script exists
+if [ ! -f "$MOCK_SERVER_SCRIPT" ]; then
+    error "Mock server script not found at: $MOCK_SERVER_SCRIPT"
+    exit 1
+fi
 
 # Change to workspace directory for running commands
 cd "$WORKSPACE_DIR"
@@ -97,7 +110,7 @@ cat "$CONFIG_FILE"
 
 # Start mock server
 log "Starting mock server on port $MOCK_SERVER_PORT..."
-python3 tests/e2e/mock_server.py --port "$MOCK_SERVER_PORT" &
+python3 "$MOCK_SERVER_SCRIPT" --port "$MOCK_SERVER_PORT" &
 MOCK_PID=$!
 echo $MOCK_PID > /tmp/mock_server.pid
 
@@ -164,5 +177,5 @@ log "  Mock server:    http://localhost:$MOCK_SERVER_PORT (PID: $MOCK_PID)"
 log "  Trabas server:  http://localhost:$PUBLIC_PORT (PID: $SERVER_PID)"
 log "  Trabas client:  PID: $CLIENT_PID"
 log ""
-log "To run tests: python3 tests/e2e/run_tests.py --server-url http://localhost:$PUBLIC_PORT --client-id $CLIENT_ID"
-log "To cleanup: tests/e2e/cleanup.sh"
+log "To run tests: python3 $SCRIPT_DIR/run_tests.py --server-url http://localhost:$PUBLIC_PORT --client-id $CLIENT_ID"
+log "To cleanup: $SCRIPT_DIR/cleanup.sh"

@@ -23,4 +23,48 @@ jobs:
     - name: Run "common" package tests
       run: cargo test --package common --verbose -- --test-threads=1 --nocapture
 
-  # TODO: simulate integration tests, e.g. run a server with redis
+  end-to-end-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Python dependencies
+      run: |
+        python3 -m pip install --upgrade pip requests
+    
+    - name: Build Release Binary
+      run: cargo build --release --manifest-path cli/Cargo.toml
+    
+    - name: Verify Binary
+      run: |
+        ls -la target/release/
+        ./target/release/trabas version
+    
+    - name: Make E2E scripts executable
+      run: chmod +x tests/e2e/*.sh
+    
+    - name: Setup E2E Test Environment
+      env:
+        WORKSPACE_DIR: "/tmp/trabas_test"
+        TRABAS_BINARY: "${{ github.workspace }}/target/release/trabas"
+        MOCK_SERVER_PORT: "3000"
+        PUBLIC_PORT: "8001"
+        CLIENT_PORT: "8002"
+        CLIENT_ID: "e2e-test-client"
+      run: |
+        ./tests/e2e/setup.sh
+
+    - name: Run End-to-End Tests
+      run: |
+        python3 tests/e2e/run_tests.py \
+          --server-url http://localhost:8001 \
+          --client-id e2e-test-client \
+          --timeout 15
+
+    - name: Cleanup E2E Environment
+      if: always()
+      run: |
+        ./tests/e2e/cleanup.sh
+        echo "Final process check:"
+        ps aux | grep -E "(trabas|mock_server)" || echo "No remaining test processes found"

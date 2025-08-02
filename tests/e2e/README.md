@@ -42,26 +42,30 @@ python3 tests/e2e/run_tests.py
 ## Test Coverage
 
 ### Basic Functionality
-- ✅ **Ping/Pong** - Basic connectivity test
-- ✅ **Path-based routing** - `server:8001/client-id/path`
-- ✅ **Query parameter routing** - `server:8001/path?trabas_client_id=client-id`
+- [x] **Ping/Pong** - Basic connectivity test
+- [x] **Path-based routing** - `server:8001/client-id/path`
+- [x] **Query parameter routing** - `server:8001/path?trabas_client_id=client-id`
 
 ### HTTP Methods
-- ✅ **GET requests** - Various response types
-- ✅ **POST requests** - JSON and text payloads
-- ✅ **PUT requests** - Update operations
-- ✅ **DELETE requests** - Delete operations
+- [x] **GET requests** - Various response types
+- [x] **POST requests** - JSON and text payloads
+- [x] **PUT requests** - Update operations
+- [x] **DELETE requests** - Delete operations
 
 ### Data Handling
-- ✅ **JSON responses** - Structured data
-- ✅ **Headers forwarding** - Custom headers preservation
-- ✅ **Large payloads** - 10KB+ data transmission
-- ✅ **Different status codes** - 200, 201, 400, 500, etc.
+- [x] **JSON responses** - Structured data
+- [x] **Headers forwarding** - Custom headers preservation
+- [x] **Large payloads** - 10KB+ data transmission
+- [x] **Different status codes** - 200, 201, 400, 500, etc.
 
 ### Performance & Reliability
-- ✅ **Slow requests** - 1+ second responses
-- ✅ **Timeout handling** - Request timeout management
-- ✅ **Error scenarios** - Non-existent client IDs
+- [x] **Slow requests** - 1+ second responses
+- [x] **Timeout handling** - Request timeout management
+- [x] **Error scenarios** - Non-existent client IDs
+- [ ] **Resource exhaustion (Stress Test)** - Simulate high load and resource limits
+
+## Scalability Tests
+- [ ] **Multiple Server Instances** - Run multiple Trabas servers (Ofc with redis) and clients
 
 ## Mock Server Endpoints
 

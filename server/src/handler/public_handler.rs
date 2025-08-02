@@ -180,6 +180,8 @@ async fn public_handler(
         .ok()
         .and_then(|val| val.parse::<u64>().ok())
         .unwrap_or(60); // default timeout is 60 seconds
+    // TODO: check client connection in each iteration of getting response
+    // instead of waiting for the timeout, we break right away if the client is disconnected
     let res = match public_service.get_response(client_id.clone(), request_id.clone(), timeout).await {
         Ok(value) => value,
         Err(msg) => {

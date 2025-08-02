@@ -5,7 +5,7 @@ use log::{self, LevelFilter};
 use once_cell::sync::Lazy;
 use clap::{error::ErrorKind, CommandFactory, Parser, Subcommand};
 use env_logger::{Env, Builder, Target};
-use common::{_info, config::{init_env_from_config, keys::{CONFIG_KEY_GLOBAL_DEBUG, CONFIG_KEY_GLOBAL_LOG_LIMIT}, set_configs}, logger::StickyLogger, version::set_root_version};
+use common::{_info, config::{init_env_from_config, keys::{CONFIG_KEY_GLOBAL_DEBUG, CONFIG_KEY_GLOBAL_LOG_LIMIT}, set_configs}, logger::LOGGER, version::set_root_version};
 use trabas::{PROJECT_NAME, PROJECT_VERSION};
 use ctrlc;
 
@@ -261,11 +261,6 @@ enum ServerCacheActions {
 fn show_version() {
     println!("{} v{}", PROJECT_NAME, PROJECT_VERSION);
 }
-
-// lazy init using once_cell
-static LOGGER: Lazy<StickyLogger> = Lazy::new(|| 
-    StickyLogger::new(10, 
-    std::env::var(CONFIG_KEY_GLOBAL_LOG_LIMIT).unwrap_or("5".to_string()).parse::<usize>().expect("Failed to parse"), false));
 
 fn cleanup_logger_state() {
     if let Ok(mut state) = LOGGER.state.lock() {

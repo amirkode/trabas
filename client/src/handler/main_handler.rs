@@ -1,10 +1,11 @@
-use std::{sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration, vec};
 
 use http::StatusCode;
 
 use common::{
     convert::{from_json_slice, to_json_vec}, 
     data::dto::{public_request::PublicRequest, public_response::PublicResponse, tunnel_ack::TunnelAck, tunnel_client::TunnelClient}, 
+    logger::append_header_log,
     net::{
         http_json_response_as_bytes, 
         prepare_packet, 
@@ -35,6 +36,7 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
     let server_port = std::env::var(config_keys::CONFIG_KEY_CLIENT_SERVER_PORT).unwrap_or_default();
     let server_address = format!("{}:{}", server_host, server_port);
     let debug = std::env::var(config_keys::CONFIG_KEY_GLOBAL_DEBUG).unwrap_or_default() == "true";
+    let mut prev_added_header_log = 0;
     // is one thousands a good enough limit (?)
     let mut max_tries = 1000;
     while max_tries > 0 {
@@ -113,9 +115,19 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         }
 
         _info!("Successfully authenticated and registered with the server service.");
-        _info!(raw: "Available Public Endpoints:");
-        for endpoint in ack.public_endpoints {
-            _info!("* `{}`", endpoint);
+        if debug {
+            _info!(raw: "Available Public Endpoints:");
+            for endpoint in ack.public_endpoints {
+                _info!("* `{}`", endpoint);
+            }
+        } else {
+            let mut add_to_header_logs = vec![format!("Tunnel [{}] established. Available Public Endpoints:", ack.id)];
+            for endpoint in ack.public_endpoints {
+                add_to_header_logs.push(format!("* `{}`", endpoint));
+            }
+
+            append_header_log(add_to_header_logs.clone(), 0);
+            prev_added_header_log = add_to_header_logs.len();
         }
         
         // create channel for request queue
@@ -148,6 +160,11 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         // wait until released
         receiver_handler.await.unwrap_or_default();
         sender_handler.await.unwrap_or_default();
+
+        if !debug {
+            // clear endpoints from header logs
+            append_header_log(vec![], prev_added_header_log);
+        }
     }
 
     _info!("Max server binding retries exceeded.");

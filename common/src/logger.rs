@@ -1,8 +1,11 @@
 use std::sync::{Mutex, atomic::{AtomicUsize, Ordering}};
 use std::io::{stdout, Write};
 use log::{Record, Level, Metadata};
+use once_cell::sync::Lazy;
 use chrono::Local;
 use crossterm::terminal::size;
+
+use crate::config::keys::CONFIG_KEY_GLOBAL_LOG_LIMIT;
 
 const MAX_BODY_LOGS: usize = 2000;
 
@@ -75,14 +78,16 @@ impl StickyLogger {
         }
         
         // draw a separator line full width
-        let (cols, _) = size().unwrap_or((80, 24));
+        let (cols, rows) = size().unwrap_or((80, 24));
         out.push_str("\x1b[2K");
         out.push_str(&"─".repeat(cols as usize));
         out.push('\n');
 
+        let remaining_rows = (rows as usize).saturating_sub(header_height + 4);
+
         // draw body section.
         let total = state.body_buffer.len();
-        let count = self.body_height.min(total);
+        let count = 0.max(remaining_rows.min(self.body_height.min(total)));
         let start_idx = total.saturating_sub(count);
         if self.show_newest_first {
             for msg in state.body_buffer[start_idx..].iter().rev().take(self.body_height) {
@@ -150,6 +155,32 @@ impl Drop for StickyLogger {
             self.cleanup(&mut state);
         }
     }
+}
+
+
+// GLOBAL STATIC LOG: lazy init using once_cell
+pub static LOGGER: Lazy<StickyLogger> = Lazy::new(|| 
+    StickyLogger::new(10, 
+    std::env::var(CONFIG_KEY_GLOBAL_LOG_LIMIT).unwrap_or("5".to_string()).parse::<usize>().expect("Failed to parse"), false));
+
+pub fn append_header_log(lines: Vec<String>, pop_len: usize) {
+    let mut state: std::sync::MutexGuard<'_, LoggerState> = LOGGER.state.lock().unwrap();
+    let max_header_height = LOGGER.header_height.load(Ordering::Relaxed);
+
+    let header_len = state.header_buffer.len();
+    state.header_buffer.truncate(header_len.saturating_sub(pop_len));
+    state.header_buffer.extend(lines);
+    
+    // in manual mode, be more lenient with header height - allow it to grow
+    // but still have some reasonable limit to prevent runaway growth
+    let reasonable_max = max_header_height.max(15);
+    if state.header_buffer.len() > reasonable_max {
+        // truncate when exceeding the limit
+        state.header_buffer.truncate(reasonable_max);
+    }
+
+    LOGGER.set_header_height(state.header_buffer.len());
+    LOGGER.redraw(&mut state);
 }
 
 

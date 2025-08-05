@@ -96,6 +96,37 @@ impl TcpStreamTLS {
             self.tcp_write.as_mut().unwrap().write_all(buf).await
         }
     }
+
+    pub async fn test_connection(&mut self) -> bool {
+        // poll-style reading to check if connection is alive without blocking
+        let mut test_buffer = [0; 1];
+        match tokio::time::timeout(tokio::time::Duration::from_millis(1), self.read(&mut test_buffer)).await {
+            Ok(Ok(0)) => {
+                // this must be closed
+                false
+            },
+            Ok(Ok(_)) => {
+                // some data is available
+                true
+            },
+            Ok(Err(_)) => {
+                // of course error indicates that connection is closed
+                false
+            },
+            Err(_) => {
+                // we assume it's still open
+                true
+            }
+        }
+    }
+
+    pub async fn flush(&mut self) -> Result<(), std::io::Error> {
+        if self.tcp_tls_write.is_some() {
+            self.tcp_tls_write.as_mut().unwrap().flush().await
+        } else {
+            self.tcp_write.as_mut().unwrap().flush().await
+        }
+    }
 }
 
 // IMPORTANT

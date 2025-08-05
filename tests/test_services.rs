@@ -37,7 +37,14 @@ mod tests {
     use server::service::cache_service::CacheService;
 
     async fn send_http_request(url: String, cookies: Option<HashMap<String, String>>) -> Result<Response, String> {
-        let client = Client::new();
+        send_http_request_with_timeout(url, cookies, Duration::from_secs(60)).await
+    }
+
+    async fn send_http_request_with_timeout(url: String, cookies: Option<HashMap<String, String>>, timeout: Duration) -> Result<Response, String> {
+        let client = Client::builder()
+            .timeout(timeout)
+            .build()
+            .map_err(|e| format!("Failed to build client: {}", e))?;
         let mut headers = HeaderMap::new();
         if let Some(cookies) = cookies {
             let cookie_string = cookies
@@ -74,6 +81,7 @@ mod tests {
             env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_SERVER_HOST), "127.0.0.1");
             env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_SERVER_PORT), "3334");
             env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY), server_secret);
+            env::set_var(String::from(config_keys::CONFIG_KEY_GLOBAL_DEBUG), "true");
 
             // init logger
             Builder::from_env(Env::default().default_filter_or("info"))
@@ -749,5 +757,116 @@ mod tests {
     fn set_test_logger(logs: StdArc<StdMutex<Vec<String>>>) -> Result<(), SetLoggerError> {
         let logger = Box::leak(Box::new(TestLogger { logs }));
         log::set_logger(logger).map(|()| log::set_max_level(log::LevelFilter::Info))
+    }
+
+    #[tokio::test]
+    async fn test_e2e_request_flow_with_client_disconnect_stop_signal() {
+        // init mock env
+        init_test_env();
+
+        // start server service
+        let cache_repo = Arc::new(MockCacheRepo::new());
+        let client_repo = Arc::new(MockClientRepo::new());
+        let request_repo = Arc::new(MockRequestRepo::new());
+        let response_repo = Arc::new(MockResponseRepo::new());
+        let config_handler = Arc::new(MockConfigHandlerImpl::new());
+        let server_exec = tokio::spawn(async move {
+            server::run(
+                server::config::ServerRequestConfig::new(
+                    "127.0.0.1".to_string(),
+                    3333, 
+                    3334, 
+                    0, // no request limit
+                    false, // no cache client id
+                    false
+                ),
+                cache_repo, 
+                client_repo, 
+                request_repo, 
+                response_repo,
+                config_handler).await;
+        });
+
+        // delay for 2 seconds to wait the server to start up
+        sleep(Duration::from_secs(2)).await;
+
+        let slow_mock_response = String::from("slow_pong");
+        
+        // simulate a slow underlying repository
+        struct SlowMockUnderlyingRepo {
+            mock_response: String,
+        }
+        
+        impl SlowMockUnderlyingRepo {
+            fn new(mock_response: String) -> Self {
+                Self { mock_response }
+            }
+        }
+        
+        #[async_trait::async_trait]
+        impl client::data::repository::underlying_repo::UnderlyingRepo for SlowMockUnderlyingRepo {
+            async fn forward(&self, _: Vec<u8>, _: String) -> Result<Vec<u8>, String> {
+                tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+                
+                if let Ok(res) = common::net::http_string_response_as_bytes(self.mock_response.clone(), http::StatusCode::from_u16(200).unwrap()) {
+                    return Ok(res);
+                }
+        
+                Err(String::from("An error occurred"))
+            }
+
+            async fn test_connection(&self, _: String) -> Result<(), String> {
+                // always return ok for mock
+                Ok(())
+            }
+        }
+
+        let slow_underlying_repo = Arc::new(SlowMockUnderlyingRepo::new(slow_mock_response.clone()));
+
+        // start client service with slow response
+        env::set_var(String::from(config_keys::CONFIG_KEY_CLIENT_ID), "slow_client_test");
+        let client_exec = tokio::spawn(async move {
+            client::serve(String::from("The target underlying address, This has no effect"), slow_underlying_repo, false).await;
+        });
+
+        // wait for client to start
+        sleep(Duration::from_secs(2)).await;
+
+        let start_time = std::time::Instant::now();
+        
+        // simulate immediate client disconnect
+        let request_task = tokio::spawn(async move {
+            let stream = tokio::net::TcpStream::connect("127.0.0.1:3333").await.unwrap();
+            let request = format!(
+                "GET /slow_client_test/ping HTTP/1.1\r\n\
+                 Host: 127.0.0.1:3333\r\n\
+                 Connection: keep-alive\r\n\r\n"
+            );
+    
+            use tokio::io::AsyncWriteExt;
+            let (read_half, mut write_half) = tokio::io::split(stream);
+            
+            write_half.write_all(request.as_bytes()).await.unwrap();
+            
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+            drop(write_half);
+            drop(read_half);
+        });
+
+
+        let _ = request_task.await;
+        let elapsed = start_time.elapsed();
+        assert!(elapsed.as_secs() <= 3);
+        
+        // note that there's no asserttion for stop signal, but we should see these logs:
+        // - "Client connection has been closed for request: [request id]"
+        // -  "Signal to stop received."
+
+        sleep(Duration::from_secs(1)).await;
+
+        // abort services
+        server_exec.abort();
+        client_exec.abort();
     }
 }

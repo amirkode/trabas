@@ -62,12 +62,20 @@ impl PublicService {
     // get response by corresponding request id
     // it will always check the response until it's found in the cache
     // when the timeout is reached, it breaks and returns a timeout error
-    pub async fn get_response(&self, client_id: String, request_id: String, timeout_in_secs: u64) -> Result<PublicResponse, String> {
+    pub async fn get_response<F, Fut>(&self, client_id: String, request_id: String, timeout_in_secs: u64, stop_signal: F) -> Result<PublicResponse, String>
+    where
+        F: Fn() -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = bool> + Send,
+    {
         let start_time = Instant::now();
         let mut elapsed: u64;
         // add initial break for 4 ms
         sleep(Duration::from_millis(4)).await;
         loop {
+            if stop_signal().await {
+                return Err(String::from("Signal to stop received"));
+            }
+
             // check data and return right away if it's found
             let res = (*self.response_repo).pop(client_id.clone(), request_id.clone()).await;
             if res.is_ok() {

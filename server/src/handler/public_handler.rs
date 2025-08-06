@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use chrono::Utc;
 use common::convert::{parse_request_bytes, request_to_bytes, modify_headers_of_response_bytes};
@@ -45,16 +47,18 @@ pub async fn register_public_handler(
 // handling public request up to receive a response
 // TODO: implement error responses
 async fn public_handler(
-    mut stream: TcpStreamTLS, 
+    stream: TcpStreamTLS, 
     client_service: ClientService, 
     public_service: PublicService, 
     cache_service: CacheService,
     cache_client_id: bool,
     return_tunenl_id: bool
 ) -> () {
+    let stream = Arc::new(Mutex::new(stream));
+    
     // read data as bytes
     let mut raw_request = Vec::new();
-    if let Err(e) = HttpReader::from_tcp_stream(&mut stream).read(&mut raw_request, true).await {
+    if let Err(e) = HttpReader::from_tcp_stream(&mut *stream.lock().await).read(&mut raw_request, true).await {
         _error!("Error reading incoming request: {}", e);
         return;
     }
@@ -75,7 +79,7 @@ async fn public_handler(
             };
 
             _error!("{}", msg);
-            stream.write_all(&response).await.unwrap();
+            stream.lock().await.write_all(&response).await.unwrap();
             return;
         }   
     };
@@ -93,7 +97,7 @@ async fn public_handler(
                 } 
             };
 
-            stream.write_all(&response).await.unwrap();
+            stream.lock().await.write_all(&response).await.unwrap();
             // stream.shutdown().await.unwrap();
             // stream.write_all(msg.as_bytes()).await.unwrap();
             return;
@@ -113,7 +117,7 @@ async fn public_handler(
             };
 
             _error!("{}", msg);
-            stream.write_all(&response).await.unwrap();
+            stream.lock().await.write_all(&response).await.unwrap();
             return;
         }
     };
@@ -144,7 +148,7 @@ async fn public_handler(
                     _info!("Public Request: {} processed [cache hit].", request_id);
         
                     // return the cached response to public client
-                    stream.write_all(&cached_response).await.unwrap();
+                    stream.lock().await.write_all(&cached_response).await.unwrap();
         
                     return
                 },
@@ -169,7 +173,7 @@ async fn public_handler(
             } 
         };
 
-        stream.write_all(&response).await.unwrap();
+        stream.lock().await.write_all(&response).await.unwrap();
         return;
     };
 
@@ -180,16 +184,30 @@ async fn public_handler(
         .ok()
         .and_then(|val| val.parse::<u64>().ok())
         .unwrap_or(60); // default timeout is 60 seconds
-    // TODO: check client connection in each iteration of getting response
-    // instead of waiting for the timeout, we break right away if the client is disconnected
-    let res = match public_service.get_response(client_id.clone(), request_id.clone(), timeout).await {
+    let stream_for_check = stream.clone();
+    let res = match public_service.get_response(client_id.clone(), request_id.clone(), timeout, {
+        let request_id = request_id.clone();
+        move || {
+            let stream_check = stream_for_check.clone();
+            let request_id = request_id.clone();
+            async move {
+                // check client connection in each iteration of getting response
+                // instead of waiting for the timeout, we break right away if the client is disconnected
+                let stop = !stream_check.lock().await.test_connection().await;
+                if stop {
+                    _info!("Client connection has been closed for request: {}", request_id);
+                }
+                stop
+            }
+        }
+    }).await {
         Ok(value) => value,
         Err(msg) => {
             _error!("{}", msg);
             let response = http_json_response_as_bytes(
                 HttpResponse::new(false, msg), StatusCode::from_u16(400).unwrap()).unwrap();
 
-            stream.write_all(&response).await.unwrap();
+            stream.lock().await.write_all(&response).await.unwrap();
             return;
         }
     };
@@ -214,7 +232,7 @@ async fn public_handler(
     _info!("Public Request: {} processed.", request_id);
 
     // finally return the response to public client
-    stream.write_all(&res).await.unwrap();
+    stream.lock().await.write_all(&res).await.unwrap();
 }
 
 fn normalize_response_headers(res: Vec<u8>, to_cache_client_id: Option<String>, to_return_tunnel_id: Option<String>) -> Vec<u8> {
@@ -310,7 +328,7 @@ fn get_client_id<T>(mut request: Request<T>, cache_client_id: bool) -> Result<(R
     }
 
     let client_id = client_id.unwrap_or_default().to_string();
-    let cached_client_id = cached_client.unwrap_or_default().trim().to_string();;
+    let cached_client_id = cached_client.unwrap_or_default().trim().to_string();
     if client_id.is_empty() && cached_client_id.is_empty() {
         // there's no way to identify the client
         return Err(String::from("Client ID cannot be empty or invalid."));

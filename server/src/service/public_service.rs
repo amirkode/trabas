@@ -73,6 +73,8 @@ impl PublicService {
         sleep(Duration::from_millis(4)).await;
         loop {
             if stop_signal().await {
+                 // set request as done
+                (*self.request_repo).ack_done(client_id, request_id).await?;
                 return Err(String::from("Signal to stop received"));
             }
 

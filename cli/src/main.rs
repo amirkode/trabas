@@ -36,6 +36,7 @@ const CONFIG_ARG_CL_SERVER_SIGNING_KEY: &str = "server-signing-key";
 // config arg keys for server
 const CONFIG_ARG_SV_GEN_KEY: &str = "gen-key";
 const CONFIG_ARG_SV_KEY: &str = "key";
+const CONFIG_ARG_SV_ENFORCE_TLS: &str = "enforce-tls";
 const CONFIG_ARG_SV_PUBLIC_ENDPOINT: &str = "public-endpoint";
 const CONFIG_ARG_SV_PUBLIC_REQUEST_TIMEOUT: &str = "public-request-timeout";
 const CONFIG_ARG_SV_REDIS_ENABLE: &str = "redis-enable";
@@ -149,6 +150,10 @@ enum ServerActions {
         #[command(subcommand)]
         action: ServerCacheActions,
     },
+    SSLConfig {
+        #[command(subcommand)]
+        action: ServerSSLActions,
+    },
     SetConfig {
         #[arg(
             name = CONFIG_ARG_SV_GEN_KEY, 
@@ -162,6 +167,12 @@ enum ServerActions {
             help="Set server secret"
         )]
         key: Option<String>,
+        #[arg(
+            name = CONFIG_ARG_SV_ENFORCE_TLS, 
+            long,
+            help="Enforce TLS for server"
+        )]
+        enforce_tls: Option<String>,
         #[arg(
             name = CONFIG_ARG_SV_PUBLIC_ENDPOINT, 
             long,
@@ -204,6 +215,20 @@ enum ServerActions {
         )]
         force: bool,
     }
+}
+
+#[derive(Subcommand)]
+enum ServerSSLActions {
+    GenerateKeys {
+        #[arg(long, help = "Path to the server config file")] 
+        server_conf_path: Option<String>,
+        #[arg(long, help = "Custom DNS name to include in SANs")]
+        host: Option<String>,
+        #[arg(long, help = "Custom IP address to include in SANs")]
+        ip: Option<String>,
+        #[arg(long, help = "Force regenerate SSL keys")] 
+        force: bool,
+    },
 }
 
 // Actions for managing server/request cache
@@ -541,9 +566,16 @@ async fn main() {
                     server::config::remove_cache_config((*client_id).clone(), (*method).clone(), (*path).clone()).await;
                 },
             },
+            ServerActions::SSLConfig { action } => match action {
+                ServerSSLActions::GenerateKeys { server_conf_path, host, ip, force } => {
+                    cleanup_logger_state();
+                    server::config::generate_ssl_keys(server_conf_path.clone(), host.clone(), ip.clone(), *force);
+                },
+            },
             ServerActions::SetConfig { 
-                gen_key, 
+                gen_key,
                 key, 
+                enforce_tls,
                 public_endpoint, 
                 public_request_timeout, 
                 redis_enable, 
@@ -555,7 +587,8 @@ async fn main() {
                 cleanup_logger_state();
 
                 if gen_key.is_none() && 
-                    key.is_none() && 
+                    key.is_none() &&
+                    enforce_tls.is_none() && 
                     redis_enable.is_none() &&
                     redis_host.is_none() &&
                     redis_port.is_none() && 
@@ -564,9 +597,10 @@ async fn main() {
                     public_request_timeout.is_none() {
                     let mut cmd = Cli::command();
                     let error_message = format!(
-                        "At least one of the following arguments must be provided: --{}, --{}, --{}, --{}, --{}, --{}, --{} or --{}",
+                        "At least one of the following arguments must be provided: --{}, --{}, --{}, --{}, --{}, --{}, --{}, --{} or --{}",
                         CONFIG_ARG_SV_GEN_KEY,
                         CONFIG_ARG_SV_KEY,
+                        CONFIG_ARG_SV_ENFORCE_TLS,
                         CONFIG_ARG_SV_PUBLIC_ENDPOINT,
                         CONFIG_ARG_SV_PUBLIC_REQUEST_TIMEOUT,
                         CONFIG_ARG_SV_REDIS_ENABLE,
@@ -601,6 +635,7 @@ async fn main() {
                 // set redis config
                 server::config::set_server_configs(
                     (*key).clone(),
+                    (*enforce_tls).clone(),
                     (*redis_enable).clone(),
                     (*redis_host).clone(),
                     (*redis_port).clone(),

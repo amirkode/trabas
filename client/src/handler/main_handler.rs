@@ -87,7 +87,7 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         }
         
         let mut server_response = Vec::new();
-        if let Err(e) = read_bytes_from_socket_for_internal(&mut read_stream, &mut server_response).await {
+        if let Err(e) = read_bytes_from_socket_for_internal(&mut read_stream, &mut server_response, u64::MAX).await {
             _error!("Failed to read server service response: {}", e);
             continue;
         }
@@ -190,12 +190,12 @@ pub async fn tunnel_receiver_handler(
     _info!("Tunnel [{}] receiver handler started.", tunnel_id.clone());
 
     let mut last_received = Instant::now();
-    const TIMEOUT: u64 = 30; // in seconds
+    const TIMEOUT: u64 = 3; // in seconds
     const IDLE_SLEEP: u64 = 50; // in milliseconds
     while !(*handler_stopped.lock().await) {
         // get incoming request server service to forward
         let mut request = Vec::new();
-        if let Err(e) = read_bytes_from_mutexed_socket_for_internal(stream.clone(), &mut request).await {
+        if let Err(e) = read_bytes_from_mutexed_socket_for_internal(stream.clone(), &mut request, u64::MAX).await {
             _error!("{}", e);
             break;
         }

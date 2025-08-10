@@ -11,6 +11,13 @@ foo@bar:~$ trabas server set-config --gen-key
 ```
 this will generate the secret for the first time. You may regenerate later using `--force` option.
 
+### **SV_ENFORCE_TLS**
+
+Tell server whether to enforce TLS for all incoming connections from Client Services (the value `true` or `false`):
+```console
+foo@bar:~$ trabas server set-config --enforce-tls [value goes here]
+```
+
 ### **SV_PUBLIC_ENDPOINT**
 
 A public endpoint host will be returned to the client:

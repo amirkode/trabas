@@ -1,16 +1,34 @@
-## Server Setup
+# Server Setup
 This guide will cover remote server setup especially with **TLS** for client-server connection. For simplicity, we will focus on **Docker** setup.
 
-### Proxy
+## Proxy
 Trabas utilizes standard TCP Connection for data sharing. It has its own data format (not tied to a particular protocol, i.e: HTTP) for client-server data sharing. If you use a reverse proxy, ensure it forwards the data packet **without protocol specific validation**. You may use NGINX with stream enabled or other tools that offer such feature.
 
-### Setting up TLS
+## Setting up TLS
 
-To establish connection via TLS, we need a reverse proxy since the server service has not supported the TLS yet. In this example, we will use NGINX as our reversed proxy.
+To establish connection via TLS, we have two options:
+- Behind Reverse Proxy (e.g: NGINX, HAProxy, etc.)
+  - The server service will not handle TLS directly, but rather the reverse proxy will handle it.
+- Direct TLS Connection (supported since `v0.2.0`)
 
-**Generate CA and Server Certification**
+### **Generate CA and Server Certification**
+You may generate these certificates using trusted issuers e.g: `Let's Encrypt, DigiCert, etc`. But, if your prefer self-signed certificates, you can use the following methods:
 
-You may generate these certificates using trusted issuers e.g: `Let's Encrypt, DigiCert, etc`. But, you can follow these steps for self-signed certificates using `openssl`. In this case, we try to generate certificates for `localhost` (You should change some details for a real server deployment).
+### A. Using `trabas` CLI:
+Since `v0.2.0`, `trabas` CLI supports generating self-signed certificates for server service.
+You can generate the CA and server certificates using `trabas` CLI:
+```console
+foo@bar:~$ trabas server ssl-config generate-keys --host localhost --ip 127.0.0.1
+```
+This command will generate the CA and server certificates in the `trabas_config` directory. The generated files will be:
+- `ca.crt`: The CA certificate.
+- `ca.key`: The CA private key.
+- `server.crt`: The server certificate signed by the CA.
+- `server.csr`: The server certificate signing request.
+- `server.key`: The server private key.
+
+### B. Manual Generation with `openssl`:
+In this case, we try to generate certificates for `localhost` (You should change some details for a real server deployment).
 
 _Generate CA Certificate_
 
@@ -55,6 +73,7 @@ foo@bar:~$ openssl verify -CAfile ca.crt server.crt
 ```
 
 ### Run Server Service with Docker
+In this example, we will use NGINX as our reversed proxy.
 
 We provide Dockerfiles and docker-compose files for server service deployment using Docker. You can find them in the `docker/server` directory of the project.
 

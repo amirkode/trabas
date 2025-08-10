@@ -62,12 +62,23 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         let (mut read_stream, mut write_stream) = if use_tls {
             _info!("TLS option enabled. Binding to TLS...");
             let cert = get_ca_certificate().unwrap();
-            let connector = native_tls::TlsConnector::builder()
+            let connector = match native_tls::TlsConnector::builder()
                 .add_root_certificate(cert)
                 .build()
-                .unwrap();
-            let connector = TlsConnector::from(connector);
-            let tls_stream = connector.connect(server_host.as_str(), tcp_stream).await.unwrap();
+            {
+                Ok(connector) => TlsConnector::from(connector),
+                Err(e) => {
+                    _error!("Failed to create TLS connector: {}", e);
+                    continue;
+                }
+            };
+            let tls_stream = match connector.connect(server_host.as_str(), tcp_stream).await {
+                Ok(stream) => stream,
+                Err(e) => {
+                    _error!("Failed to establish TLS connection: {}", e);
+                    continue;
+                }
+            };
             let (read_stream, write_stream) = tokio::io::split(tls_stream);
             _info!("TLS binding successful.");
             (TcpStreamTLS::from_tcp_tls_read(read_stream), TcpStreamTLS::from_tcp_tls_write(write_stream))

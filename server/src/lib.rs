@@ -24,8 +24,7 @@ use redis::aio::MultiplexedConnection;
 
 // TLS
 use tokio_native_tls::TlsAcceptor as TokioTlsAcceptor;
-use native_tls::{Identity, TlsAcceptor};
-use std::path::PathBuf;
+use native_tls::TlsAcceptor;
 use common::net::TcpStreamTLS;
 
 // entry point of the server service
@@ -99,7 +98,6 @@ pub async fn entry_point(config: ServerRequestConfig) {
     }
 }
 
-// TODO: implement app level TCP Listener with TLS for Client Connection
 pub async fn run(
     config: ServerRequestConfig,
     cache_repo: std::sync::Arc<dyn CacheRepo + Send + Sync>,
@@ -156,7 +154,7 @@ pub async fn run(
                                 let (r, w) = tokio::io::split(tls_stream);
                                 let read = TcpStreamTLS::from_tcp_tls_read(r);
                                 let write = TcpStreamTLS::from_tcp_tls_write(w);
-                                crate::handler::tunnel_handler::register_tunnel_handler(read, write, cs, ps).await;
+                                register_tunnel_handler(read, write, cs, ps).await;
                             }
                             Err(e) => {
                                 _info!("TLS handshake failed: {}", e);

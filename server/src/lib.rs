@@ -125,6 +125,8 @@ pub async fn run(
         }
     } else { None };
 
+    _info!("tls acceptor initialized: {}", tls_acceptor.is_some());
+
     loop {
         tokio::select! {
             Ok((socket, _)) = public_listener.accept() => {
@@ -171,6 +173,7 @@ pub async fn run(
 }
 
 fn build_tls_acceptor() -> Result<TokioTlsAcceptor, String> {
+    _info!("Building TLS acceptor...");
     let identity = get_server_identity_from_pem()?;
     let acceptor = TlsAcceptor::builder(identity).build().map_err(|e| format!("build TlsAcceptor: {}", e))?;
     

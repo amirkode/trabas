@@ -3,7 +3,7 @@ name: Try Build and Run Test
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "dev-0.2" ]
   pull_request:
     branches: [ "main" ]
 
@@ -59,6 +59,13 @@ jobs:
       run: |
         python3 tests/e2e/run_tests.py \
           --server-url http://localhost:8001 \
+          --client-id e2e-test-client \
+          --timeout 15
+
+    - name: Run End-to-End Tests (TLS Tunnel)
+      run: |
+        python3 tests/e2e/run_tests.py \
+          --server-url http://localhost:8003 \
           --client-id e2e-test-client \
           --timeout 15
 

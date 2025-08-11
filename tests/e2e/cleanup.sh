@@ -54,6 +54,22 @@ if [ -f /tmp/trabas_server.pid ]; then
     rm -f /tmp/trabas_server.pid
 fi
 
+# Stop Trabas server (TLS)
+if [ -f /tmp/trabas_server_tls.pid ]; then
+    SERVER_TLS_PID=$(cat /tmp/trabas_server_tls.pid)
+    if ps -p $SERVER_TLS_PID > /dev/null 2>&1; then
+        log "Stopping Trabas server (TLS) (PID: $SERVER_TLS_PID)..."
+        kill $SERVER_TLS_PID 2>/dev/null || true
+        sleep 1
+        # Force kill if still running
+        if ps -p $SERVER_TLS_PID > /dev/null 2>&1; then
+            warn "Force killing Trabas server (TLS)..."
+            kill -9 $SERVER_TLS_PID 2>/dev/null || true
+        fi
+    fi
+    rm -f /tmp/trabas_server_tls.pid
+fi
+
 # Stop mock server
 if [ -f /tmp/mock_server.pid ]; then
     MOCK_PID=$(cat /tmp/mock_server.pid)
@@ -68,6 +84,22 @@ if [ -f /tmp/mock_server.pid ]; then
         fi
     fi
     rm -f /tmp/mock_server.pid
+fi
+
+# Stop mock server (TLS target)
+if [ -f /tmp/mock_server_tls.pid ]; then
+    MOCK_TLS_PID=$(cat /tmp/mock_server_tls.pid)
+    if ps -p $MOCK_TLS_PID > /dev/null 2>&1; then
+        log "Stopping TLS target mock server (PID: $MOCK_TLS_PID)..."
+        kill $MOCK_TLS_PID 2>/dev/null || true
+        sleep 1
+        # Force kill if still running
+        if ps -p $MOCK_TLS_PID > /dev/null 2>&1; then
+            warn "Force killing TLS target mock server..."
+            kill -9 $MOCK_TLS_PID 2>/dev/null || true
+        fi
+    fi
+    rm -f /tmp/mock_server_tls.pid
 fi
 
 # Kill any remaining trabas processes

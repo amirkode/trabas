@@ -10,7 +10,7 @@ use common::config::*;
 
 #[derive(Debug, Clone)]
 pub struct ClientRequestConfig {
-    pub host: Option<String>,       
+    pub host: Option<String>,
     pub port: u16,
     pub use_tls: bool
 }
@@ -162,7 +162,7 @@ pub fn set_server_port(value: u16, force: bool) -> () {
 // get CA certificate for TLS connection
 pub fn get_ca_certificate() -> Result<Certificate, String> {
     let config_path = get_config_path();
-    let ca_path = format!("{}/{}", config_path, CONFIG_CA_FILE_NAME);
+    let ca_path = format!("{}/ssl/{}", config_path, CONFIG_CA_FILE_NAME);
     let ca_data = fs::read(ca_path)
         .map_err(|e| format!("Error reading CA file: {}",  e))?;
     let ca = Certificate::from_pem(&ca_data)

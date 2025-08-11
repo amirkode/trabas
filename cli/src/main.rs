@@ -36,7 +36,6 @@ const CONFIG_ARG_CL_SERVER_SIGNING_KEY: &str = "server-signing-key";
 // config arg keys for server
 const CONFIG_ARG_SV_GEN_KEY: &str = "gen-key";
 const CONFIG_ARG_SV_KEY: &str = "key";
-const CONFIG_ARG_SV_ENFORCE_TLS: &str = "enforce-tls";
 const CONFIG_ARG_SV_PUBLIC_ENDPOINT: &str = "public-endpoint";
 const CONFIG_ARG_SV_PUBLIC_REQUEST_TIMEOUT: &str = "public-request-timeout";
 const CONFIG_ARG_SV_REDIS_ENABLE: &str = "redis-enable";
@@ -70,7 +69,7 @@ enum Commands {
         #[arg(long)]
         log_limit: Option<usize>,
     },
-     Client {
+    Client {
         #[command(subcommand, long_help = CLIENT_HELP.as_str())]
         action: ClientActions,
     },
@@ -145,6 +144,9 @@ enum ServerActions {
         // add tunnel id to response headers
         #[arg(long)]
         return_tunnel_id: bool,
+        // enforce tls
+        #[arg(long)]
+        tls: bool,
     },
     CacheConfig {
         #[command(subcommand)]
@@ -167,12 +169,6 @@ enum ServerActions {
             help="Set server secret"
         )]
         key: Option<String>,
-        #[arg(
-            name = CONFIG_ARG_SV_ENFORCE_TLS, 
-            long,
-            help="Enforce TLS for server"
-        )]
-        enforce_tls: Option<String>,
         #[arg(
             name = CONFIG_ARG_SV_PUBLIC_ENDPOINT, 
             long,
@@ -530,6 +526,7 @@ async fn main() {
                 client_request_limit, 
                 cache_client_id,
                 return_tunnel_id,
+                tls,
             } => {
                 print_log_header(SERVICE_TAG_SERVER.to_string());
                 let root_host = match host {
@@ -548,7 +545,8 @@ async fn main() {
                         *client_port,
                         client_request_limit,
                         *cache_client_id,
-                        *return_tunnel_id
+                        *return_tunnel_id,
+                        *tls,
                     )
                 ).await;
             },
@@ -575,7 +573,6 @@ async fn main() {
             ServerActions::SetConfig { 
                 gen_key,
                 key, 
-                enforce_tls,
                 public_endpoint, 
                 public_request_timeout, 
                 redis_enable, 
@@ -588,7 +585,6 @@ async fn main() {
 
                 if gen_key.is_none() && 
                     key.is_none() &&
-                    enforce_tls.is_none() && 
                     redis_enable.is_none() &&
                     redis_host.is_none() &&
                     redis_port.is_none() && 
@@ -597,10 +593,9 @@ async fn main() {
                     public_request_timeout.is_none() {
                     let mut cmd = Cli::command();
                     let error_message = format!(
-                        "At least one of the following arguments must be provided: --{}, --{}, --{}, --{}, --{}, --{}, --{}, --{} or --{}",
+                        "At least one of the following arguments must be provided: --{}, --{}, --{}, --{}, --{}, --{}, --{} or --{}",
                         CONFIG_ARG_SV_GEN_KEY,
                         CONFIG_ARG_SV_KEY,
-                        CONFIG_ARG_SV_ENFORCE_TLS,
                         CONFIG_ARG_SV_PUBLIC_ENDPOINT,
                         CONFIG_ARG_SV_PUBLIC_REQUEST_TIMEOUT,
                         CONFIG_ARG_SV_REDIS_ENABLE,
@@ -635,7 +630,6 @@ async fn main() {
                 // set redis config
                 server::config::set_server_configs(
                     (*key).clone(),
-                    (*enforce_tls).clone(),
                     (*redis_enable).clone(),
                     (*redis_host).clone(),
                     (*redis_port).clone(),

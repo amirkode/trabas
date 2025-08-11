@@ -113,7 +113,7 @@ If the server starts successfully, the log will show:
 ### Setting up Client Service
 
 Trabas has supported TLS connection from client service. You can follow these steps:
-- In your client host machine (local), copy the generated `ca.crt` to `[bin directory]/trabas_config/`.
+- In your client host machine (local), copy the generated `ca.crt` to `[bin directory]/trabas_config/ssl/`.
 - Ensure the server host and server port are correctly set to the target NGINX proxy.
 - You run as the client service normally with additional `--tls` option:
     ```console

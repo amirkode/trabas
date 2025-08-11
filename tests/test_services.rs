@@ -110,6 +110,7 @@ mod tests {
                     3334, 
                     0, // no request limit
                     false, // no cache client id
+                    false,
                     false
                 ),
                 cache_repo, 
@@ -207,6 +208,7 @@ mod tests {
                     3334, 
                     request_limit,
                     false,
+                    false,
                     false
                 ), 
                 cache_repo, 
@@ -299,6 +301,7 @@ mod tests {
                     3333, 
                     3334, 
                     0,
+                    false,
                     false,
                     false
                 ), 
@@ -414,6 +417,7 @@ mod tests {
                     3334, 
                     0,
                     cache_client_id,
+                    false,
                     false
                 ), 
                 cache_repo, 
@@ -521,7 +525,8 @@ mod tests {
                     3334, 
                     0,
                     false,
-                    true
+                    true,
+                    false
                 ), 
                 cache_repo, 
                 client_repo, 
@@ -631,6 +636,7 @@ mod tests {
                     3333,
                     3334,
                     0,
+                    false,
                     false,
                     false
                 ),
@@ -778,6 +784,7 @@ mod tests {
                     3334, 
                     0, // no request limit
                     false, // no cache client id
+                    false,
                     false
                 ),
                 cache_repo, 

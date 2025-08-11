@@ -45,7 +45,8 @@ pub struct ServerRequestConfig {
     pub client_port: u16,
     pub client_request_limit: u16,
     pub cache_client_id: bool,
-    pub return_tunnel_id: bool
+    pub return_tunnel_id: bool,
+    pub tls: bool,
 }
 
 impl ServerRequestConfig {
@@ -55,7 +56,8 @@ impl ServerRequestConfig {
         client_port: u16, 
         client_request_limit: u16, 
         cache_client_id: bool,
-        return_tunnel_id: bool
+        return_tunnel_id: bool,
+        tls: bool
     ) -> Self {
         ServerRequestConfig {
             host,
@@ -63,7 +65,8 @@ impl ServerRequestConfig {
             client_port,
             client_request_limit,
             cache_client_id,
-            return_tunnel_id
+            return_tunnel_id,
+            tls
         }
     }
 
@@ -359,7 +362,6 @@ pub fn get_server_identity_from_pem() -> Result<Identity, String> {
 
 pub fn set_server_configs(
     key: Option<String>,
-    enforce_ssl: Option<String>,
     redis_enable: Option<String>,
     redis_host: Option<String>,
     redis_port: Option<String>,

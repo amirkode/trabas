@@ -10,9 +10,9 @@ services:
       # - "127.0.0.1:8789:8789"
     networks:
       - trabas_network
-    # uncomment if you have your own .env set
+    # uncomment if you have your own trabas_config set
     # volumes:
-    #   - ./.env:/install/bin/trabas_config/.env
+    #  - ./trabas_config:/install/bin/trabas_config
 
   nginx:
     image: nginx:alpine

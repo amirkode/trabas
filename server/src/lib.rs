@@ -116,10 +116,7 @@ pub async fn run(
     let cache_service = get_cache_service(cache_repo, config_handler);
     let client_service = ClientService::new(client_repo);
     let public_service = PublicService::new(request_repo, response_repo, config.client_request_limit);
-    let enforce_tls = std::env::var(common::config::keys::CONFIG_KEY_SERVER_ENFORCE_TLS)
-        .unwrap_or_else(|_| "false".into())
-        .to_lowercase() == "true";
-    let tls_acceptor: Option<TokioTlsAcceptor> = if enforce_tls {
+    let tls_acceptor: Option<TokioTlsAcceptor> = if config.tls {
         match build_tls_acceptor() {
             Ok(a) => Some(a),
             Err(e) => {

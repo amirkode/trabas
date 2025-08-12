@@ -77,8 +77,8 @@ Here's the demo showing how the tunneling works using `Trabas`.
 [![Watch the video](https://github.com/user-attachments/assets/47b7397b-45e8-47f5-9296-7f18998cda8e)](https://jotling.liter8.sh/trabas-demo-v1?media=video)
 
 ## Change Logs
-### **v0.2.0** (pre-release)
-Full TLS support including SSL key generation, native TLS acceptor, and TOFU (Trust On First Use) option.
+### **v0.2.0** <sub><sup>(pre-release)</sup></sub>
+Native TLS support for server service including SSL key generation, native TLS acceptor, and TOFU (Trust On First Use) option.
 
 ### [**v0.1.2**](https://github.com/amirkode/trabas/releases/tag/trabas-v0.1.2) <sub><sup>(2025-07-25)</sup></sub>
 Optimized tunnel connection handling (including improved loops, health checks, deadlock prevention, and request distribution). Added version compatibility checks and upstream (underlying service) connection validation.

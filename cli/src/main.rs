@@ -29,6 +29,7 @@ const CONFIG_ARG_GLOBAL_LOG_LIMIT: &str = "log-limit";
 
 // config arg keys for client
 const CONFIG_ARG_CL_ID: &str = "client-id";
+const CONFIG_ARG_CL_TLS_TOFU_ENABLE: &str = "tls-tofu-enable";
 const CONFIG_ARG_CL_SERVER_HOST: &str = "server-host";
 const CONFIG_ARG_CL_SERVER_PORT: &str = "server-port";
 const CONFIG_ARG_CL_SERVER_SIGNING_KEY: &str = "server-signing-key";
@@ -98,6 +99,12 @@ enum ClientActions {
             help="Client ID used for server handshake"
         )]
         client_id: Option<Option<String>>,
+        #[arg(
+            name = CONFIG_ARG_CL_TLS_TOFU_ENABLE, 
+            long,
+            help= "Enable TLS Trust On First Use"
+        )]
+        tls_tofu_enable: Option<String>,
         #[arg(
             name = CONFIG_ARG_CL_SERVER_HOST, 
             long,
@@ -477,7 +484,8 @@ async fn main() {
                 ).await;
             },
             ClientActions::SetConfig { 
-                client_id, 
+                client_id,
+                tls_tofu_enable, 
                 server_host, 
                 server_port, 
                 server_signing_key, 
@@ -488,8 +496,9 @@ async fn main() {
                 if client_id.is_none() && server_host.is_none() && server_port.is_none() && server_signing_key.is_none() {
                     let mut cmd = Cli::command();
                     let error_message = format!(
-                        "At least one of the following arguments must be provided: --{}, --{}, --{}, or --{}",
+                        "At least one of the following arguments must be provided: --{}, --{}, --{}, --{}, or --{}",
                         CONFIG_ARG_CL_ID,
+                        CONFIG_ARG_CL_TLS_TOFU_ENABLE,
                         CONFIG_ARG_CL_SERVER_HOST,
                         CONFIG_ARG_CL_SERVER_PORT,
                         CONFIG_ARG_CL_SERVER_SIGNING_KEY

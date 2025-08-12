@@ -17,9 +17,11 @@ pub mod keys {
     pub const CONFIG_KEY_GLOBAL_LOG_LIMIT: &str = "GLOBAL_LOG_LIMIT";
     // client
     pub const CONFIG_KEY_CLIENT_ID: &str = "CL_ID";
+    pub const CONFIG_KEY_CLIENT_TLS_TOFU_ENABLE: &str = "CL_TLS_TOFU_ENABLE";
     pub const CONFIG_KEY_CLIENT_SERVER_HOST: &str = "CL_SERVER_HOST";
     pub const CONFIG_KEY_CLIENT_SERVER_PORT: &str = "CL_SERVER_PORT";
     pub const CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY: &str = "CL_SERVER_SIGNING_KEY";
+    pub const CONFIG_KEY_CLIENT_SERVER_FINGERPRINT: &str = "CL_SERVER_FINGERPRINT";
     // server
     pub const CONFIG_KEY_SERVER_SECRET: &str = "SV_SECRET";
     pub const CONFIG_KEY_SERVER_PUBLIC_ENDPOINT: &str = "SV_PUBLIC_ENDPOINT";

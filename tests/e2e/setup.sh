@@ -7,9 +7,15 @@ set -e  # Exit on any error
 # Configuration
 WORKSPACE_DIR="${WORKSPACE_DIR:-/tmp/trabas_test}"
 TRABAS_BINARY="${TRABAS_BINARY:-./target/release/trabas}"
+# Mock server ports
 MOCK_SERVER_PORT="${MOCK_SERVER_PORT:-3000}"
 PUBLIC_PORT="${PUBLIC_PORT:-8001}"
 CLIENT_PORT="${CLIENT_PORT:-8002}"
+# Mock server TLS ports (for TLS tunnel test)
+MOCK_SERVER_TLS_PORT="${MOCK_SERVER_TLS_PORT:-3001}"
+PUBLIC_PORT_TLS="${PUBLIC_PORT_TLS:-8003}"
+CLIENT_PORT_TLS="${CLIENT_PORT_TLS:-8004}"
+
 CLIENT_ID="${CLIENT_ID:-e2e-test-client}"
 
 # Colors for output
@@ -77,6 +83,10 @@ log "Generating server configuration..."
     --redis-enable false \
     --force
 
+# Generate SSL Keys (for TLS tunnel)
+log "Generating SSL keys..."
+"$TRABAS_BINARY" server ssl-config generate-keys --host localhost --ip 127.0.0.1 --force || true
+
 # Set GLOBAL_DEBUG to true in the config file
 echo "GLOBAL_DEBUG=true" >> "$CONFIG_FILE"
 
@@ -111,7 +121,9 @@ log "Generating client configuration..."
 log "Generated configuration:"
 cat "$CONFIG_FILE"
 
-# Start mock server
+########################################
+# Start mock servers (plain + TLS target)
+########################################
 log "Starting mock server on port $MOCK_SERVER_PORT..."
 python3 "$MOCK_SERVER_SCRIPT" --port "$MOCK_SERVER_PORT" &
 MOCK_PID=$!
@@ -128,6 +140,25 @@ if ! curl -f "http://localhost:$MOCK_SERVER_PORT/ping" >/dev/null 2>&1; then
 fi
 
 log "Mock server started successfully (PID: $MOCK_PID)"
+
+# Start second mock server for TLS tunnel
+log "Starting mock server (TLS target) on port $MOCK_SERVER_TLS_PORT..."
+python3 "$MOCK_SERVER_SCRIPT" --port "$MOCK_SERVER_TLS_PORT" &
+MOCK_TLS_PID=$!
+echo $MOCK_TLS_PID > /tmp/mock_server_tls.pid
+
+# Wait for TLS mock server to start
+sleep 2
+
+# Verify TLS target mock server is running
+if ! curl -f "http://localhost:$MOCK_SERVER_TLS_PORT/ping" >/dev/null 2>&1; then
+    error "TLS target mock server failed to start"
+    kill $MOCK_PID 2>/dev/null || true
+    kill $MOCK_TLS_PID 2>/dev/null || true
+    exit 1
+fi
+
+log "TLS target mock server started successfully (PID: $MOCK_TLS_PID)"
 
 # Start Trabas server
 log "Starting Trabas server (public: $PUBLIC_PORT, client: $CLIENT_PORT)..."
@@ -146,6 +177,27 @@ if ! ps -p $SERVER_PID > /dev/null; then
 fi
 
 log "Trabas server started successfully (PID: $SERVER_PID)"
+
+########################################
+# Start Trabas server with TLS (client listener over TLS)
+########################################
+log "Starting Trabas server with TLS (public: $PUBLIC_PORT_TLS, client: $CLIENT_PORT_TLS)..."
+"$TRABAS_BINARY" server run --public-port "$PUBLIC_PORT_TLS" --client-port "$CLIENT_PORT_TLS" --tls &
+SERVER_TLS_PID=$!
+echo $SERVER_TLS_PID > /tmp/trabas_server_tls.pid
+
+# Wait for server to start
+sleep 3
+
+# Verify server is running
+if ! ps -p $SERVER_TLS_PID > /dev/null; then
+    error "Trabas server with TLS failed to start"
+    kill $MOCK_PID 2>/dev/null || true
+    kill $MOCK_TLS_PID 2>/dev/null || true
+    exit 1
+fi
+
+log "Trabas server with TLS started successfully (PID: $SERVER_TLS_PID)"
 
 # Start Trabas client
 log "Starting Trabas client..."
@@ -166,9 +218,40 @@ fi
 
 log "Trabas client started successfully (PID: $CLIENT_PID)"
 
+########################################
+# Start Trabas client with TLS
+########################################
+log "Starting Trabas client with TLS..."
+# Override CL_SERVER_PORT just for this process to point to TLS client port
+CL_SERVER_PORT="$CLIENT_PORT_TLS" "$TRABAS_BINARY" client serve --host localhost --port "$MOCK_SERVER_TLS_PORT" --tls &
+CLIENT_TLS_PID=$!
+echo $CLIENT_TLS_PID > /tmp/trabas_client_tls.pid
+
+# Wait for client to connect
+sleep 5
+
+# Verify client is running
+if ! ps -p $CLIENT_TLS_PID > /dev/null; then
+    error "Trabas client with TLS failed to start"
+    kill $SERVER_TLS_PID 2>/dev/null || true
+    kill $MOCK_PID 2>/dev/null || true
+    kill $MOCK_TLS_PID 2>/dev/null || true
+    exit 1
+fi
+
+log "Trabas client with TLS started successfully (PID: $CLIENT_TLS_PID)"
+
 # Test basic connectivity
 log "Testing basic connectivity..."
 if curl -f "http://localhost:$PUBLIC_PORT/$CLIENT_ID/ping" >/dev/null 2>&1; then
+    log "Basic connectivity test passed!"
+else
+    warn "Basic connectivity test failed, but continuing with full tests..."
+fi
+
+
+log "Testing basic connectivity (TLS tunnel)..."
+if curl -f "http://localhost:$PUBLIC_PORT_TLS/$CLIENT_ID/ping" >/dev/null 2>&1; then
     log "Basic connectivity test passed!"
 else
     warn "Basic connectivity test failed, but continuing with full tests..."
@@ -179,6 +262,9 @@ log "Services running:"
 log "  Mock server:    http://localhost:$MOCK_SERVER_PORT (PID: $MOCK_PID)"
 log "  Trabas server:  http://localhost:$PUBLIC_PORT (PID: $SERVER_PID)"
 log "  Trabas client:  PID: $CLIENT_PID"
+log "  TLS mock server: http://localhost:$MOCK_SERVER_TLS_PORT (PID: $MOCK_TLS_PID)"
+log "  Trabas server (TLS):  http://localhost:$PUBLIC_PORT_TLS (PID: $SERVER_TLS_PID)"
+log "  Trabas client (TLS):  PID: $CLIENT_TLS_PID"
 log ""
 log "To run tests: python3 $SCRIPT_DIR/run_tests.py --server-url http://localhost:$PUBLIC_PORT --client-id $CLIENT_ID"
 log "To cleanup: $SCRIPT_DIR/cleanup.sh"

@@ -58,13 +58,17 @@ python3 tests/e2e/run_tests.py
 - [x] **Large payloads** - 10KB+ data transmission
 - [x] **Different status codes** - 200, 201, 400, 500, etc.
 
+### Security
+- [ ] **TLS Behind NGINX** - Ensure TLS termination is handled correctly
+- [ ] **TLS Direct** - Test direct TLS connections to the Trabas server
+
 ### Performance & Reliability
 - [x] **Slow requests** - 1+ second responses
 - [x] **Timeout handling** - Request timeout management
 - [x] **Error scenarios** - Non-existent client IDs
-- [ ] **Resource exhaustion (Stress Test)** - Simulate high load and resource limits
 
-## Scalability Tests
+### Scalability Tests
+- [ ] **Resource exhaustion (Stress Test)** - Simulate high load and resource limits
 - [ ] **Multiple Server Instances** - Run multiple Trabas servers (Ofc with redis) and clients
 
 ## Mock Server Endpoints

@@ -9,6 +9,7 @@ use tokio_native_tls::TlsStream;
 
 use crate::convert::response_to_bytes;
 use crate::_info;
+use tokio::time::{timeout, Duration};
 
 // these values are standard for this tool
 pub const HEALTH_CHECK_PACKET_ACK: &str = "hc_1565b85_ack";
@@ -159,16 +160,29 @@ pub fn separate_packets(data: Vec<u8>) -> (Vec<Vec<u8>>, bool) {
 }
 
 // WARNING: this is only use for Trabas: internal Server-Client Connection
-pub async fn read_bytes_from_socket_for_internal(stream: &mut TcpStreamTLS, res: &mut Vec<u8>) -> Result<(), String> {
+pub async fn read_bytes_from_socket_for_internal(stream: &mut TcpStreamTLS, res: &mut Vec<u8>, timeout_millis: u64) -> Result<(), String> {
     let mut buffer = [0; 1024];
     let end_window = PACKET_SEPARATOR.as_bytes();
     let end_window_len = end_window.len();
     let break_limit = 100;
     let mut break_cnt = 0;
     let mut prev_len = res.len();
+
     loop {
-        let n = stream.read(&mut buffer).await
-            .map_err(|e| format!("Error reading socket: {}",  e))?;
+        let n = if timeout_millis != u64::MAX {
+            let read_result = timeout(
+                Duration::from_millis(timeout_millis),
+                stream.read(&mut buffer),
+            )
+            .await;
+            match read_result {
+                Ok(Ok(n)) => n,
+                Ok(Err(e)) => return Err(format!("Error reading socket: {}", e)),
+                Err(_) => return Err("Socket read timed out".to_string()),
+            }
+        } else {
+            stream.read(&mut buffer).await.map_err(|e| format!("Error reading socket: {}", e))?
+        };
 
         // TODO: check this again, not really sure if it's useful
         // if n == 0 {
@@ -200,7 +214,7 @@ pub async fn read_bytes_from_socket_for_internal(stream: &mut TcpStreamTLS, res:
 }
 
 // TODO: do we really need to duplicate the code
-pub async fn read_bytes_from_mutexed_socket_for_internal(stream: Arc<Mutex<TcpStreamTLS>>, res: &mut Vec<u8>) -> Result<(), String> {
+pub async fn read_bytes_from_mutexed_socket_for_internal(stream: Arc<Mutex<TcpStreamTLS>>, res: &mut Vec<u8>, timeout_millis: u64) -> Result<(), String> {
     let mut buffer = [0; 1024];
     let end_window = PACKET_SEPARATOR.as_bytes();
     let end_window_len = end_window.len();
@@ -208,8 +222,19 @@ pub async fn read_bytes_from_mutexed_socket_for_internal(stream: Arc<Mutex<TcpSt
     let mut break_cnt = 0;
     let mut prev_len = res.len();
     loop {
-        let n = stream.lock().await.read(&mut buffer).await
-            .map_err(|e| format!("Error reading socket: {}",  e))?;
+        let n = if timeout_millis != u64::MAX {
+            let read_result: Result<Result<usize, std::io::Error>, tokio::time::error::Elapsed> = tokio::time::timeout(
+                Duration::from_millis(timeout_millis),
+                stream.lock().await.read(&mut buffer),
+            ).await;
+            match read_result {
+                Ok(Ok(n)) => n,
+                Ok(Err(e)) => return Err(format!("Error reading socket: {}", e)),
+                Err(_) => return Err("Socket read timed out".to_string()),
+            }
+        } else {
+            stream.lock().await.read(&mut buffer).await.map_err(|e| format!("Error reading socket: {}", e))?
+        };
 
         res.extend_from_slice(&buffer[..n]);
         // we break until the last element is the separator
@@ -228,7 +253,7 @@ pub async fn read_bytes_from_mutexed_socket_for_internal(stream: Arc<Mutex<TcpSt
             }
             break_cnt += 1;
         }
-        
+
         prev_len = curr_len;
     }
 
@@ -236,9 +261,9 @@ pub async fn read_bytes_from_mutexed_socket_for_internal(stream: Arc<Mutex<TcpSt
 }
 
 #[deprecated(since = "Tunnel registration refactor", note = "Use `read_bytes_from_socket_for_internal` function instead.")]
-pub async fn read_string_from_socket_for_internal(stream: &mut TcpStreamTLS, res: &mut String) -> Result<(), String> {
+pub async fn read_string_from_socket_for_internal(stream: &mut TcpStreamTLS, res: &mut String, timeout_millis: u64) -> Result<(), String> {
     let mut temp = Vec::new();
-    read_bytes_from_socket_for_internal(stream, &mut temp).await?;
+    read_bytes_from_socket_for_internal(stream, &mut temp, timeout_millis).await?;
     let (packets, _) = separate_packets(temp);
     if let Some(data) = packets.get(0) {
         *res = String::from_utf8(data.clone()).unwrap();

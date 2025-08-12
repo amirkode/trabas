@@ -5,11 +5,10 @@ pub mod types;
 pub mod config;
 pub mod version;
 
-use std::sync::Arc;
 use common::_info;
 
 use common::config::{ConfigHandler, ConfigHandlerImpl, keys::CONFIG_KEY_SERVER_REDIS_ENABLE};
-use config::{ServerRequestConfig, validate_configs, get_cache_service};
+use config::{ServerRequestConfig, get_server_identity_from_pem, validate_configs, get_cache_service};
 use data::repository::cache_repo::{CacheRepo, CacheRepoRedisImpl, CacheRepoProcMemImpl};
 use data::repository::client_repo::{ClientRepo, ClientRepoRedisImpl, ClientRepoProcMemImpl};
 use data::repository::request_repo::{RequestRepo, RequestRepoRedisImpl, RequestRepoProcMemImpl};
@@ -23,6 +22,11 @@ use service::public_service::PublicService;
 use tokio::net::TcpListener;
 use redis::aio::MultiplexedConnection;
 
+// TLS
+use tokio_native_tls::TlsAcceptor as TokioTlsAcceptor;
+use native_tls::TlsAcceptor;
+use common::net::TcpStreamTLS;
+
 // entry point of the server service
 pub async fn entry_point(config: ServerRequestConfig) {
     // validate required configs
@@ -31,7 +35,7 @@ pub async fn entry_point(config: ServerRequestConfig) {
     let use_redis = *configs.get(CONFIG_KEY_SERVER_REDIS_ENABLE).unwrap_or(&use_redis_default) == "true".to_string();
 
     // config handler
-    let config_handler = Arc::new(ConfigHandlerImpl {});
+    let config_handler = std::sync::Arc::new(ConfigHandlerImpl {});
 
     if use_redis {
         // store data in redis
@@ -62,10 +66,10 @@ pub async fn entry_point(config: ServerRequestConfig) {
         let redis_connection = redis_connection.unwrap();
 
         // init repo to be injected
-        let cache_repo = Arc::new(CacheRepoRedisImpl::new(redis_connection.clone()));
-        let client_repo = Arc::new(ClientRepoRedisImpl::new(redis_connection.clone()));
-        let request_repo = Arc::new(RequestRepoRedisImpl::new(redis_connection.clone()));
-        let response_repo = Arc::new(ResponsRepoRedisImpl::new(redis_connection.clone()));
+        let cache_repo = std::sync::Arc::new(CacheRepoRedisImpl::new(redis_connection.clone()));
+        let client_repo = std::sync::Arc::new(ClientRepoRedisImpl::new(redis_connection.clone()));
+        let request_repo = std::sync::Arc::new(RequestRepoRedisImpl::new(redis_connection.clone()));
+        let response_repo = std::sync::Arc::new(ResponsRepoRedisImpl::new(redis_connection.clone()));
         // run the services
         run(
             config,
@@ -78,10 +82,10 @@ pub async fn entry_point(config: ServerRequestConfig) {
     } else {
         // store data in trabas process
         // init repo to be injected
-        let cache_repo = Arc::new(CacheRepoProcMemImpl::new());
-        let client_repo = Arc::new(ClientRepoProcMemImpl::new());
-        let request_repo = Arc::new(RequestRepoProcMemImpl::new());
-        let response_repo = Arc::new(ResponsRepoProcMemImpl::new());
+        let cache_repo = std::sync::Arc::new(CacheRepoProcMemImpl::new());
+        let client_repo = std::sync::Arc::new(ClientRepoProcMemImpl::new());
+        let request_repo = std::sync::Arc::new(RequestRepoProcMemImpl::new());
+        let response_repo = std::sync::Arc::new(ResponsRepoProcMemImpl::new());
         // run the services
         run(
             config,
@@ -94,24 +98,32 @@ pub async fn entry_point(config: ServerRequestConfig) {
     }
 }
 
-// TODO: implement app level TCP Listener with TLS for Client Connection
 pub async fn run(
     config: ServerRequestConfig,
-    cache_repo: Arc<dyn CacheRepo + Send + Sync>,
-    client_repo: Arc<dyn ClientRepo + Send + Sync>,
-    request_repo: Arc<dyn RequestRepo + Send + Sync>,
-    response_repo: Arc<dyn ResponseRepo + Send + Sync>,
-    config_handler: Arc<dyn ConfigHandler + Send + Sync>,
+    cache_repo: std::sync::Arc<dyn CacheRepo + Send + Sync>,
+    client_repo: std::sync::Arc<dyn ClientRepo + Send + Sync>,
+    request_repo: std::sync::Arc<dyn RequestRepo + Send + Sync>,
+    response_repo: std::sync::Arc<dyn ResponseRepo + Send + Sync>,
+    config_handler: std::sync::Arc<dyn ConfigHandler + Send + Sync>,
 ) {
     // init instances
     let public_listener = TcpListener::bind(config.public_svc_address()).await.unwrap();
     let client_listener = TcpListener::bind(config.client_svc_address()).await.unwrap();
-    let cache_service = get_cache_service(cache_repo, config_handler);
-    let client_service = ClientService::new(client_repo);
-    let public_service = PublicService::new(request_repo, response_repo, config.client_request_limit);
 
     _info!("[Public Listener] Listening on: `{}`", public_listener.local_addr().unwrap());
     _info!("[Client Listener] Listening on: `{}`", client_listener.local_addr().unwrap());
+
+    let cache_service = get_cache_service(cache_repo, config_handler);
+    let client_service = ClientService::new(client_repo);
+    let public_service = PublicService::new(request_repo, response_repo, config.client_request_limit);
+    let tls_acceptor: Option<TokioTlsAcceptor> = if config.tls {
+        match build_tls_acceptor() {
+            Ok(a) => Some(a),
+            Err(e) => {
+                panic!("Failed to initialize TLS acceptor: {}", e);
+            }
+        }
+    } else { None };
 
     loop {
         tokio::select! {
@@ -126,8 +138,41 @@ pub async fn run(
                 ).await;
             }
             Ok((socket, _)) = client_listener.accept() => {
-                register_tunnel_handler(socket, client_service.clone(), public_service.clone()).await;
+                if let Some(ref acceptor) = tls_acceptor {
+                    _info!("[Client Listener] Accepting connections with TLS...");
+
+                    let s = socket;
+                    let acceptor = acceptor.clone();
+                    let cs = client_service.clone();
+                    let ps = public_service.clone();
+                    tokio::spawn(async move {
+                        match acceptor.accept(s).await {
+                            Ok(tls_stream) => {
+                                let (r, w) = tokio::io::split(tls_stream);
+                                let read = TcpStreamTLS::from_tcp_tls_read(r);
+                                let write = TcpStreamTLS::from_tcp_tls_write(w);
+                                register_tunnel_handler(read, write, cs, ps).await;
+                            }
+                            Err(e) => {
+                                _info!("TLS handshake failed: {}", e);
+                            }
+                        }
+                    });
+                } else {
+                    // without TLS
+                    let (r, w) = tokio::io::split(socket);
+                    let read = TcpStreamTLS::from_tcp_read(r);
+                    let write = TcpStreamTLS::from_tcp_write(w);
+                    register_tunnel_handler(read, write, client_service.clone(), public_service.clone()).await;
+                }
             }
         }
     }
+}
+
+fn build_tls_acceptor() -> Result<TokioTlsAcceptor, String> {
+    let identity = get_server_identity_from_pem()?;
+    let acceptor = TlsAcceptor::builder(identity).build().map_err(|e| format!("build TlsAcceptor: {}", e))?;
+    
+    Ok(TokioTlsAcceptor::from(acceptor))
 }

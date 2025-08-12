@@ -40,6 +40,7 @@ Option | Type | Description |
 `--client-request-limit` | Integer [Optional] | The request limit for each client service |
 `--cache-client-id` | No value [Optional] | Allow client id to pass through cookie header `trabas_client_id`. This also caches the client id passed by request path using `Set-Cookie` response header. |
 `--return-tunnel-id` | No value [Optional] | Return tunnel ID to the response headers with key `trabas_tunnel_id` |
+`--tls` | No value [Optional] | Enable TLS for the server |
 #### Example
 ```console
 foo@bar:~$ trabas server run --public-port 8001 --client-port 8002
@@ -61,6 +62,27 @@ Option | Type | Description |
 ```console
 foo@bar:~$ trabas server set-config --gen-key --redis-host localhost --redis-port 6379 --redis-pass mypass --force
 ```
+
+#### `trabas server ssl-config generate-keys`
+Setting SSL configuration for the server.
+#### Options
+Option | Type | Description |
+--- | --- | --- |
+`--server_conf_path` | String | Server configuration file path |
+`--host` | String | Host for SANs |
+`--ip` | String | IP for SANs |
+`--force` | No value [Optional] | Force rewrite all configs that has been set |
+#### Example
+If we have our server.conf file as follows:
+```console
+foo@bar:~$ trabas server ssl-config generate-keys --server_conf_path /path/to/server.conf
+```
+Or if simply provide the host and/or ip as follows:
+```console
+foo@bar:~$ trabas server ssl-config generate-keys --host localhost --ip 127.0.0.1
+```
+
+
 #### `trabas server cache-config set`
 Setting cache configuration for specific requests.
 
@@ -115,6 +137,7 @@ Set client service configuration.
 Option | Type | Description |
 --- | --- | --- |
 `--client-id` | No value/String [Optional] | Specify Client ID or Generate it if no value is passed |
+`--tls-tofu-enable` | Boolean [Optional] | Enable TOFU (Trust On First Use) for TLS connection |
 `--server-host` | String [Optional] | Server service host |
 `--server-port` | Integer | Server service port |
 `--server-signing-key` | String | Server secret for server authentication |

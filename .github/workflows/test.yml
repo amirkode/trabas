@@ -62,6 +62,13 @@ jobs:
           --client-id e2e-test-client \
           --timeout 15
 
+    - name: Run End-to-End Tests (TLS Tunnel)
+      run: |
+        python3 tests/e2e/run_tests.py \
+          --server-url http://localhost:8003 \
+          --client-id e2e-test-client \
+          --timeout 15
+
     - name: Cleanup E2E Environment
       if: always()
       run: |

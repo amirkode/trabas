@@ -1,14 +1,13 @@
-
 use common::convert::{from_json_slice, to_json_vec};
 use common::data::dto::tunnel_ack::TunnelAck;
 use common::net::{
     append_path_to_url, prepare_packet, read_bytes_from_mutexed_socket_for_internal, read_bytes_from_socket_for_internal, separate_packets, TcpStreamTLS, HEALTH_CHECK_PACKET_ACK
 };
 use common::{validate_signature, _error, _info};
-use tokio::net::TcpStream;
 use tokio::time::{sleep, Instant};
 use std::sync::Arc;
 use std::time::Duration;
+use std::u64;
 use tokio::sync::Mutex;
 use common::config;
 use common::string;
@@ -20,17 +19,15 @@ use crate::service::client_service::ClientService;
 use crate::service::public_service::PublicService;
 use crate::version::{get_server_version, get_min_client_version};
 
-pub async fn register_tunnel_handler(stream: TcpStream, client_service: ClientService, public_service: PublicService) -> () {
+pub async fn register_tunnel_handler(mut read_stream: TcpStreamTLS, mut write_stream: TcpStreamTLS, client_service: ClientService, public_service: PublicService) -> () {
     let tunnel_id = string::generate_rand_id(32);
     
     _info!("Pending tunnel [{}] connection.", tunnel_id.clone());
 
-    let (read_stream, write_stream) = tokio::io::split(stream);
-    let mut read_stream = TcpStreamTLS::from_tcp_read(read_stream);
-    let mut write_stream = TcpStreamTLS::from_tcp_write(write_stream);
     // register client ID
     let mut raw_response = Vec::new();
-    if let Err(e) = read_bytes_from_socket_for_internal(&mut read_stream, &mut raw_response).await {
+    const TIMEOUT_MILLIS: u64 = 5000; // 5 seconds timeout
+    if let Err(e) = read_bytes_from_socket_for_internal(&mut read_stream, &mut raw_response, TIMEOUT_MILLIS).await {
         _error!("Error reading connection: {}", e);
         return;
     }
@@ -342,12 +339,12 @@ async fn tunnel_receiver_handler(
     _info!("Tunnel [{}] receiver handler started.", tunnel_id.clone());
 
     let mut last_received = Instant::now();
-    const TIMEOUT: u64 = 30; // in seconds
+    const TIMEOUT: u64 = 3; // in seconds
     const IDLE_SLEEP: u64 = 50; // in milliseconds
     while !(*handler_stopped.lock().await) {
         // get latest response from stream
         let mut raw_response = Vec::new();
-        if let Err(e) = read_bytes_from_mutexed_socket_for_internal(stream.clone(), &mut raw_response).await {
+        if let Err(e) = read_bytes_from_mutexed_socket_for_internal(stream.clone(), &mut raw_response, u64::MAX).await {
             _error!("{}", e);
             break;
         }

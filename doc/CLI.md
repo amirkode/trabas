@@ -40,6 +40,7 @@ Option | Type | Description |
 `--client-request-limit` | Integer [Optional] | The request limit for each client service |
 `--cache-client-id` | No value [Optional] | Allow client id to pass through cookie header `trabas_client_id`. This also caches the client id passed by request path using `Set-Cookie` response header. |
 `--return-tunnel-id` | No value [Optional] | Return tunnel ID to the response headers with key `trabas_tunnel_id` |
+`--tls` | No value [Optional] | Enable TLS for the server |
 #### Example
 ```console
 foo@bar:~$ trabas server run --public-port 8001 --client-port 8002
@@ -51,7 +52,6 @@ Option | Type | Description |
 --- | --- | --- |
 `--gen-key` | No value [Optional] | Generate server secret |
 `--key` | String [Optional] | Manual set server secret |
-`--enforce-tls` | String [Optional] | Flag whether to enforce TLS for all incoming connections from Client Services. |
 `--public-endpoint` | String | A public endpoint host will be returned to the client |
 `--redis-enable` | String | Enable flag whether to use redis for temporary transfer store. The value is either `true` or `false` |
 `--redis-host` | String | Host for redis |
@@ -137,6 +137,7 @@ Set client service configuration.
 Option | Type | Description |
 --- | --- | --- |
 `--client-id` | No value/String [Optional] | Specify Client ID or Generate it if no value is passed |
+`--tls-tofu-enable` | Boolean [Optional] | Enable TOFU (Trust On First Use) for TLS connection |
 `--server-host` | String [Optional] | Server service host |
 `--server-port` | Integer | Server service port |
 `--server-signing-key` | String | Server secret for server authentication |

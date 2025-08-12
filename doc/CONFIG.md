@@ -11,13 +11,6 @@ foo@bar:~$ trabas server set-config --gen-key
 ```
 this will generate the secret for the first time. You may regenerate later using `--force` option.
 
-### **SV_ENFORCE_TLS**
-
-Tell server whether to enforce TLS for all incoming connections from Client Services (the value `true` or `false`):
-```console
-foo@bar:~$ trabas server set-config --enforce-tls [value goes here]
-```
-
 ### **SV_PUBLIC_ENDPOINT**
 
 A public endpoint host will be returned to the client:
@@ -107,11 +100,11 @@ You may also want to specific the value, but ensure your id is unique accross re
 ```console
 foo@bar:~$ trabas server set-config --client-id [value goes here]
 ```
-### **CL_SERVER_HOST**
+### **CL_TLS_TOFU_ENABLE**
 
-A server host:
+A flag indicating whether to enable TOFU (Trust On First Use) for TLS connections (the value `true` or `false`):
 ```console
-foo@bar:~$ trabas server set-config --server-host [value goes here]
+foo@bar:~$ trabas server set-config --tls-tofu-enable [value goes here]
 ```
 
 ### **CL_SERVER_HOST**
@@ -119,6 +112,19 @@ foo@bar:~$ trabas server set-config --server-host [value goes here]
 A server host:
 ```console
 foo@bar:~$ trabas server set-config --server-host [value goes here]
+```
+
+### **CL_SERVER_PORT**
+
+A server port:
+```console
+foo@bar:~$ trabas server set-config --server-port [value goes here]
+```
+
+### **CL_SERVER_SIGNING_KEY**
+A server signing key, used for server authentication.
+```console
+foo@bar:~$ trabas server set-config --server-signing-key [value goes here]
 ```
 
 ### Run at once
@@ -126,6 +132,11 @@ You may also run the command at once:
 ```console
 foo@bar:~$ trabas server set-config --client-id --server-host [value] --server-port [value]
 ```
+
+### **CL_SERVER_FINGERPRINT**
+A server fingerprint, used for verifying the server's identity.
+The value will be generated automatically when the first time handshake occurs.
+
 
 ## Note
 Trabas also provides `--force` option to replace an existing config value as mentioned earlier:

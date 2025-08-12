@@ -5,7 +5,6 @@ use std::{
     path::Path,
 };
 
-use common::_info;
 use common::{
     config::*, 
     data::dto::cache_config::CacheConfig, 
@@ -342,9 +341,6 @@ pub fn get_server_identity_from_pem() -> Result<Identity, String> {
     let ssl_dir = PathBuf::from(base).join("ssl");
     let cert_path = ssl_dir.join("server.crt");
     let key_path = ssl_dir.join("server.key");
-
-    _info!("cert_path: {}", cert_path.display());
-    _info!("key_path: {}", key_path.display());
 
     let cert_bytes = std::fs::read(cert_path).map_err(|e| format!("read server.crt: {}", e))?;
     let key_bytes = std::fs::read(key_path).map_err(|e: std::io::Error| format!("read server.key: {}", e))?;

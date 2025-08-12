@@ -3,10 +3,11 @@ use std::fs;
 
 use rand::{thread_rng, Rng};
 use rand::distributions::Alphanumeric;
+use sha2::{Sha256, Digest};
 use mac_address::get_mac_address; 
 use tokio_native_tls::native_tls::Certificate;
 
-use common::config::*;
+use common::{_info, config::*};
 
 #[derive(Debug, Clone)]
 pub struct ClientRequestConfig {
@@ -125,6 +126,23 @@ pub fn set_server_signing_key(value: String, force: bool) -> () {
     println!("You may find the value later again in the config file")   
 }
 
+pub fn set_tls_tofu_enable(value: String, force: bool) -> () {
+    // check whether the TLS Trust On First Use is already set
+    let config = get_configs_from_proc_env();
+    if config.contains_key(keys::CONFIG_KEY_CLIENT_TLS_TOFU_ENABLE) && !force {
+        println!("TLS Trust On First Use is already set, please check it in the config file. Consider using --force option to force resetting");
+        return;
+    }
+
+    set_configs(HashMap::from([
+        (String::from(keys::CONFIG_KEY_CLIENT_TLS_TOFU_ENABLE), value.clone())
+    ]));
+
+    println!("TLS Trust On First Use has been set!");
+    println!("Value: {}", value);
+    println!("You may find the value later again in the config file")
+}
+
 pub fn set_server_host(value: String, force: bool) -> () {
     // check whether the server host is already set
     let config = get_configs_from_proc_env();
@@ -168,4 +186,26 @@ pub fn get_ca_certificate() -> Result<Certificate, String> {
     let ca = Certificate::from_pem(&ca_data)
         .map_err(|e| format!("Error loading Certificate: {}",  e))?;
     Ok(ca)
+}
+
+pub fn validate_tofu(cert: Certificate) -> Result<(), String> {
+    // get the fingerprint from the certificate
+    let der: Vec<u8> = cert.to_der().map_err(|e| format!("Error converting certificate to DER: {}", e))?;
+    let fingerprint = Sha256::digest(&der);
+    let fingerprint_hex = hex::encode(fingerprint);
+
+    // get the saved fingerprint from the config
+    let config = get_configs_from_proc_env();
+    if let Some(saved_fingerprint) = config.get(keys::CONFIG_KEY_CLIENT_SERVER_FINGERPRINT) {
+        if saved_fingerprint != &fingerprint_hex {
+            return Err(format!("Fingerprint mismatch: expected {}, got {}", saved_fingerprint, fingerprint_hex))
+        }
+    } else {
+        _info!("First connection detected, writing server fingerprint to config...");
+        set_configs(HashMap::from([
+            (String::from(keys::CONFIG_KEY_CLIENT_SERVER_FINGERPRINT), fingerprint_hex)
+        ]));
+    }
+
+    Ok(())
 }

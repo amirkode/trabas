@@ -43,7 +43,7 @@ foo@bar:~$ openssl req -x509 -new -nodes -key ca.key -sha256 -days 3650 -out ca.
 
 _Generate Server Certificate signed by the CA_
 
-Create a private key for CA:
+Create a server private key:
 ```console
 foo@bar:~$ openssl genpkey -algorithm RSA -out server.key -pkeyopt rsa_keygen_bits:2048
 ```

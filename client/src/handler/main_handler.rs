@@ -22,7 +22,7 @@ use tokio_native_tls::{native_tls, TlsConnector};
 
 use common::{_error, _info};
 use common::{config::keys as config_keys};
-use crate::{config::get_ca_certificate, service::underlying_service::UnderlyingService};
+use crate::{config::{get_ca_certificate, validate_tofu}, service::underlying_service::UnderlyingService};
 use crate::version::{get_client_version, get_min_server_version};
 
 pub async fn register_handler(underlying_host: String, service: UnderlyingService, use_tls: bool) -> () {
@@ -32,6 +32,7 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         return;
     }
     
+    let tls_tofu_enable = std::env::var(config_keys::CONFIG_KEY_CLIENT_TLS_TOFU_ENABLE).unwrap_or_default() == "true";
     let server_host = std::env::var(config_keys::CONFIG_KEY_CLIENT_SERVER_HOST).unwrap_or_default();
     let server_port = std::env::var(config_keys::CONFIG_KEY_CLIENT_SERVER_PORT).unwrap_or_default();
     let server_address = format!("{}:{}", server_host, server_port);
@@ -60,12 +61,16 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         _info!("Initial connection established."); 
 
         let (mut read_stream, mut write_stream) = if use_tls {
-            _info!("TLS option enabled. Binding to TLS...");
-            let cert = get_ca_certificate().unwrap();
-            let connector = match native_tls::TlsConnector::builder()
-                .add_root_certificate(cert)
-                .build()
-            {
+            _info!("TLS option enabled with {} mode. Binding to TLS...", if tls_tofu_enable { "TOFU" } else { "CA" });
+            let mut connector_builder = native_tls::TlsConnector::builder();
+            if tls_tofu_enable {
+                connector_builder.danger_accept_invalid_certs(true);
+            } else {
+                // must load CA certificate, since we are not using TOFU
+                let cert = get_ca_certificate().unwrap();
+                connector_builder.add_root_certificate(cert);
+            }
+            let connector = match connector_builder.build() {
                 Ok(connector) => TlsConnector::from(connector),
                 Err(e) => {
                     _error!("Failed to create TLS connector: {}", e);
@@ -79,6 +84,25 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
                     continue;
                 }
             };
+            if tls_tofu_enable {
+                // server certificate
+                let cert = match tls_stream.get_ref().peer_certificate() {
+                    Ok(Some(cert)) => cert,
+                    Ok(None) => {
+                        _error!("No peer certificate found.");
+                        continue;
+                    }
+                    Err(e) => {
+                        _error!("Failed to get peer certificate: {}", e);
+                        continue;
+                    }
+                };
+                if let Err(e) = validate_tofu(cert) {
+                    _error!("Failed to validate server certificate: {}", e);
+                    continue;
+                }
+            }
+
             let (read_stream, write_stream) = tokio::io::split(tls_stream);
             _info!("TLS binding successful.");
             (TcpStreamTLS::from_tcp_tls_read(read_stream), TcpStreamTLS::from_tcp_tls_write(write_stream))

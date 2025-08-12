@@ -112,9 +112,13 @@ If the server starts successfully, the log will show:
 ## Client Setup
 ### Setting up Client Service
 
-Trabas has supported TLS connection from client service. You can follow these steps:
-- In your client host machine (local), copy the generated `ca.crt` to `[bin directory]/trabas_config/ssl/`.
-- Ensure the server host and server port are correctly set to the target NGINX proxy.
+Trabas has supported TLS connection from client service.
+
+You can follow these steps:
+- In your client host machine (local), copy the generated `ca.crt` to `[bin directory]/trabas_config/ssl/`. Otherwise, you may enable `CL_TLS_TOFU_ENABLE` config to enable **Trust On First Use (TOFU)** for TLS connection.
+
+- Ensure the server host and server port are correctly set to our server service (or target NGINX proxy).
+
 - You run as the client service normally with additional `--tls` option:
     ```console
     foo@bar:~$ trabas client serve --host localhost --port 3000 --tls

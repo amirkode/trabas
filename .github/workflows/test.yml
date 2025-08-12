@@ -3,7 +3,7 @@ name: Try Build and Run Test
 
 on:
   push:
-    branches: [ "main", "dev-0.2" ]
+    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 

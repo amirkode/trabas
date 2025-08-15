@@ -14,16 +14,17 @@ use common::{
         separate_packets, 
         HttpResponse, 
         TcpStreamTLS, HEALTH_CHECK_PACKET_ACK,
-    }, 
-    security::sign_value
+    },
 };
 use tokio::{net::TcpStream, sync::{Mutex, mpsc, mpsc::{Sender, Receiver}}, time::{sleep, timeout, Instant}};
 use tokio_native_tls::{native_tls, TlsConnector};
 
-use common::{_error, _info};
+use common::{validate_signature, _error, _info};
 use common::{config::keys as config_keys};
 use crate::{config::{get_ca_certificate, validate_tofu}, service::underlying_service::UnderlyingService};
 use crate::version::{get_client_version, get_min_server_version};
+
+const SOCKET_TIMEOUT_MILLIS: u64 = 5000; // 5 seconds timeout
 
 pub async fn register_handler(underlying_host: String, service: UnderlyingService, use_tls: bool) -> () {
     // initial connection validation for underlying service
@@ -122,7 +123,7 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         }
         
         let mut server_response = Vec::new();
-        if let Err(e) = read_bytes_from_socket_for_internal(&mut read_stream, &mut server_response, u64::MAX).await {
+        if let Err(e) = read_bytes_from_socket_for_internal(&mut read_stream, &mut server_response, SOCKET_TIMEOUT_MILLIS).await {
             _error!("Failed to read server service response: {}", e);
             continue;
         }
@@ -146,6 +147,13 @@ pub async fn register_handler(underlying_host: String, service: UnderlyingServic
         
         if !ack.success {
             _error!("Server service rejected connection: {}", ack.message);
+            continue;
+        }
+
+        // check server signature
+        let server_mac = format!("{}_{}_{}", ack.id, tunnel_client.id, tunnel_client.alias_id);
+        if !validate_signature(ack.signature.clone(), server_mac) {
+            _error!("Server service ack denied: signature validation failed.");
             continue;
         }
 
@@ -210,8 +218,17 @@ fn get_tunnel_client() -> TunnelClient {
         .expect(format!("{} env has not been set", config_keys::CONFIG_KEY_CLIENT_ID).as_str());
     let signing_key = std::env::var(config_keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY)
         .expect(format!("{} env has not been set", config_keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY).as_str());
-    let signature = sign_value(client_id.clone(), signing_key);
-    TunnelClient::new(client_id, signature, get_client_version(), get_min_server_version())
+    TunnelClient::new(client_id, signing_key, get_client_version(), get_min_server_version())
+}
+
+fn validate_signature(signature: String, mac: String) -> bool {
+    let secret = get_server_secret();
+    validate_signature!(signature, mac, secret)
+}
+
+fn get_server_secret() -> String {
+    std::env::var(config_keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY)
+        .expect(format!("{} env has not been set", config_keys::CONFIG_KEY_CLIENT_SERVER_SIGNING_KEY).as_str())
 }
 
 pub async fn tunnel_receiver_handler(

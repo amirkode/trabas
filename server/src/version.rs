@@ -4,7 +4,7 @@
 
 use common::version::get_root_version;
 
-const MIN_CLIENT_VERSION: &str = "0.1.2-rc.0";
+const MIN_CLIENT_VERSION: &str = "0.2.0-beta.2";
 
 pub fn get_server_version() -> String {
     std::env::var("TEST_SERVER_VERSION")

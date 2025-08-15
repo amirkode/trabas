@@ -111,7 +111,6 @@ mod tests {
         let serialized = serde_json::to_string(&tunnel_ack).expect("Failed to serialize TunnelAck");
         assert!(serialized.contains("tunnel_123"));
         assert!(serialized.contains("true"));
-        assert!(serialized.contains("Connection established successfully"));
         assert!(serialized.contains("/api/endpoint1"));
         assert!(serialized.contains("/api/endpoint2"));
 
@@ -151,7 +150,6 @@ mod tests {
         );
         let serialized = serde_json::to_string(&tunnel_client).expect("Failed to serialize TunnelClient");
         assert!(serialized.contains("client_abc123"));
-        assert!(serialized.contains("signature_xyz789"));
         assert!(serialized.contains("1.0.0"));
         assert!(serialized.contains("0.5.0"));
 
@@ -288,6 +286,7 @@ mod tests {
     fn test_tunnel_ack_raw_json_deserialization() {
         let raw_json = r#"{
             "id": "tunnel_success",
+            "signature": "sig_123",
             "success": true,
             "message": "Tunnel established",
             "public_endpoints": ["/health", "/metrics", "/api/v1"]
@@ -297,6 +296,7 @@ mod tests {
             .expect("Failed to deserialize TunnelAck from raw JSON");
         
         assert_eq!(deserialized.id, "tunnel_success");
+        assert_eq!(deserialized.signature, "sig_123");
         assert_eq!(deserialized.success, true);
         assert_eq!(deserialized.message, "Tunnel established");
         assert_eq!(deserialized.public_endpoints, vec!["/health", "/metrics", "/api/v1"]);
@@ -306,6 +306,7 @@ mod tests {
     fn test_tunnel_ack_failure_raw_json_deserialization() {
         let raw_json = r#"{
             "id": "tunnel_fail",
+            "signature": "sig_fail",
             "success": false,
             "message": "Invalid credentials",
             "public_endpoints": []
@@ -315,6 +316,7 @@ mod tests {
             .expect("Failed to deserialize TunnelAck failure from raw JSON");
         
         assert_eq!(deserialized.id, "tunnel_fail");
+        assert_eq!(deserialized.signature, "sig_fail");
         assert_eq!(deserialized.success, false);
         assert_eq!(deserialized.message, "Invalid credentials");
         assert!(deserialized.public_endpoints.is_empty());

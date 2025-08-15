@@ -26,8 +26,8 @@ pub async fn register_tunnel_handler(mut read_stream: TcpStreamTLS, mut write_st
 
     // register client ID
     let mut raw_response = Vec::new();
-    const TIMEOUT_MILLIS: u64 = 5000; // 5 seconds timeout
-    if let Err(e) = read_bytes_from_socket_for_internal(&mut read_stream, &mut raw_response, TIMEOUT_MILLIS).await {
+    const SOCKET_TIMEOUT_MILLIS: u64 = 5000; // 5 seconds timeout
+    if let Err(e) = read_bytes_from_socket_for_internal(&mut read_stream, &mut raw_response, SOCKET_TIMEOUT_MILLIS).await {
         _error!("Error reading connection: {}", e);
         return;
     }
@@ -45,7 +45,7 @@ pub async fn register_tunnel_handler(mut read_stream: TcpStreamTLS, mut write_st
     let client: TunnelClient = match from_json_slice(&raw_response) {
         Some(value) => value,
         None => {
-            let tunnel_ack = TunnelAck::new(tunnel_id, false, format!("Invalid request"), vec![]);
+            let tunnel_ack = TunnelAck::fails(tunnel_id, "Invalid request".to_string());
             let packet = prepare_packet(to_json_vec(&tunnel_ack));
             write_stream.write_all(&packet).await.unwrap();
             _error!("{}", tunnel_ack.message);
@@ -57,9 +57,8 @@ pub async fn register_tunnel_handler(mut read_stream: TcpStreamTLS, mut write_st
     let version = get_server_version();
     let min_client_version = get_min_client_version();
     if !client.validate_version(version.clone(), min_client_version.clone()) {
-        let tunnel_ack = TunnelAck::new(
-            tunnel_id, 
-            false, 
+        let tunnel_ack = TunnelAck::fails(
+            tunnel_id,
             format!(
                 "Version mismatch: Server version code = {} (required ≥ {}) | Client version code = {} (required ≥ {}).",
                 version.clone(),
@@ -67,7 +66,7 @@ pub async fn register_tunnel_handler(mut read_stream: TcpStreamTLS, mut write_st
                 client.cl_version,
                 min_client_version
             ),
-            vec![]);
+        );
         let packet = prepare_packet(to_json_vec(&tunnel_ack));
         write_stream.write_all(&packet).await.unwrap();
         _error!("{}", tunnel_ack.message);
@@ -75,13 +74,13 @@ pub async fn register_tunnel_handler(mut read_stream: TcpStreamTLS, mut write_st
     }
 
     let client_id = client.id.clone();
+    let client_mac = format!("{}_{}", client.id, client.alias_id);
     // validate connection before registering client
-    if !validate_signature(client.signature.clone(), client.id.clone()) {
-        let tunnel_ack = TunnelAck::new(
+    if !validate_signature(client.signature.clone(), client_mac.clone()) {
+        let tunnel_ack = TunnelAck::fails(
             tunnel_id,
-            false, 
-            format!("Client Registration Denied. client_id: {}, signature: {}", client_id, client.signature), 
-            vec![]);
+            format!("Client Registration Denied. client_id: {}, signature: {}", client_id, client.signature),
+        );
         let packet = prepare_packet(to_json_vec(&tunnel_ack));
         write_stream.write_all(&packet).await.unwrap();
         _error!("{}", tunnel_ack.message);
@@ -97,11 +96,7 @@ pub async fn register_tunnel_handler(mut read_stream: TcpStreamTLS, mut write_st
         format!("{}{} or {}?{}={}", endpoint_prefix, &client.id, &endpoint_prefix, ext_keys::CLIENT_ID_COOKIE_KEY, &client.id),
         format!("{}{} or {}?{}={}", endpoint_prefix, &client.alias_id, &endpoint_prefix, ext_keys::CLIENT_ID_COOKIE_KEY, &client.alias_id),
     ];
-    let tunnel_ack = TunnelAck::new(
-        tunnel_id.clone(),
-        true, 
-        format!("ok"), 
-        public_endpoints);
+    let tunnel_ack = TunnelAck::success(tunnel_id.clone(), client_mac, get_server_secret(), public_endpoints);
     let packet = prepare_packet(to_json_vec(&tunnel_ack));
     write_stream.write_all(&packet).await.unwrap();
 
@@ -183,9 +178,13 @@ pub async fn register_tunnel_handler(mut read_stream: TcpStreamTLS, mut write_st
     });
 }
 
-fn validate_signature(signature: String, client_id: String) -> bool {
-    let secret = std::env::var(config::keys::CONFIG_KEY_SERVER_SECRET).unwrap_or_default();
-    validate_signature!(signature, client_id, secret)
+fn validate_signature(signature: String, mac: String) -> bool {
+    let secret = get_server_secret();
+    validate_signature!(signature, mac, secret)
+}
+
+fn get_server_secret() -> String {
+    std::env::var(config::keys::CONFIG_KEY_SERVER_SECRET).unwrap_or_default()
 }
 
 // Tunnel Connection

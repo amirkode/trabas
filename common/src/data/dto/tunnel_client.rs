@@ -1,4 +1,4 @@
-use crate::security::generate_hmac_key;
+use crate::security::{generate_hmac_key, sign_value};
 use crate::version::validate_version;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
@@ -26,11 +26,13 @@ pub struct TunnelClient {
 }
 
 impl TunnelClient {
-    pub fn new(id: String, signature: String, cl_version: String, min_sv_version: String) -> Self {
+    pub fn new(id: String, signing_key: String, cl_version: String, min_sv_version: String) -> Self {
+        let alias_id = generate_hmac_key(5); // as client nonce
+        let mac = format!("{}_{}", id, alias_id);
+        let signature = sign_value(mac, signing_key);
         TunnelClient {
             id,
-            // generate alias using a random hex string
-            alias_id: generate_hmac_key(5),
+            alias_id,
             signature,
             cl_version,
             min_sv_version,

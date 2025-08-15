@@ -101,10 +101,10 @@ mod tests {
 
     #[test]
     fn test_tunnel_ack_serialization() {
-        let tunnel_ack = TunnelAck::new(
+        let tunnel_ack = TunnelAck::success(
             "tunnel_123".to_string(),
-            true,
-            "Connection established successfully".to_string(),
+            "client_mac_abc".to_string(),
+            "server_secret_xyz".to_string(),
             vec!["/api/endpoint1".to_string(), "/api/endpoint2".to_string()]
         );
 
@@ -124,11 +124,9 @@ mod tests {
 
     #[test]
     fn test_tunnel_ack_failure_serialization() {
-        let tunnel_ack = TunnelAck::new(
+        let tunnel_ack = TunnelAck::fails(
             "tunnel_456".to_string(),
-            false,
             "Authentication failed".to_string(),
-            vec![] // Empty endpoints for failed connection
         );
 
         let serialized = serde_json::to_string(&tunnel_ack).expect("Failed to serialize TunnelAck");

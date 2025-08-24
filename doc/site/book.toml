@@ -1,0 +1,8 @@
+[book]
+authors = ["Amir Mu'tashim Billah"]
+language = "en"
+src = "src"
+title = "HTTP Tunneling Tool | Trabas"
+
+[output.html]
+default-theme = "ayu"

@@ -239,9 +239,11 @@ async fn tunnel_sender_handler(
 
         // make sure of tunnel distribution by dynamically adjusting idle sleep
         // based on the current tunnel count
-        // TODO: review
         // this should simulate Round-robin for multiple tunnels with a single client id
         // despite it's not a strict round-robin, it should be enough
+        // TODO: when we deploy multiple server instances, the tunnel count
+        // should be unique across the instances
+        // need implementation for adding server instance id/key in the client registration
         let acquired_idle_sleep = if curr_tunnel_count > 1 {
             MIN_IDLE_SLEEP * (curr_tunnel_count as u64)
         } else {

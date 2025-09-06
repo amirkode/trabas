@@ -1,7 +1,7 @@
 # Trabas - an HTTP Tunneling Tool
 > This project is still under initial development. A breaking change might happen anytime. Please, use it while watching for the latest update.
 
-Trabas is an (ngrok-like inspired) HTTP tunneling written in Rust utilizing standard TCP connection for data exchange. It offers simplicity for basic tunneling usage through an _easy-to-use_ All-in-One CLI. Find out more below!
+Trabas is an (ngrok-like inspired) HTTP tunneling tool utilizing standard TCP connection for data exchange. It offers simplicity for basic tunneling usage through an _easy-to-use_ All-in-One CLI. Find out more below!
 
 ## Features
 - Basic HTTP Tunneling.

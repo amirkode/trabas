@@ -46,7 +46,7 @@ This starts the public request and client service listeners. You may want to lim
 
 **Client Service**
 
-Initialize the config as mentioned [here](https://github.com/amirkode/trabas/blob/main/doc/CONFIG.md). Start the service:
+Initialize the config as mentioned [here](./doc/site/src/reference_guide/configuration/client.md). Start the service:
 ```console
 foo@bar:~$ trabas client serve --host localhost --port 3000
 ```

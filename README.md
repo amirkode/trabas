@@ -31,13 +31,13 @@ you can find the built binary in `target/release/trabas`.
 
 Ensure to rename binary file name to `trabas` if necessary.
 
-Once you have the binary installed, you may want to know the usage of the CLI commands. The documentation can be found [here](https://github.com/amirkode/trabas/blob/main/doc/CLI.md).
+Once you have the binary installed, you may want to know the usage of the CLI commands. The documentation can be found [here](./doc/site/src/reference_guide/cli/README.md).
 
 Here's how to start tunneling:
 
 **Server Service**
 
-Ensure a redis server is available in your system if the `SV_REDIS_ENABLE` config is set to `true`. Then, initialize the config as mentioned [here](https://github.com/amirkode/trabas/blob/main/doc/CONFIG.md).
+Ensure a redis server is available in your system if the `SV_REDIS_ENABLE` config is set to `true`. Then, initialize the config as mentioned [here](./doc/site/src/reference_guide/configuration/README.md).
 Start the service:
 ```console
 foo@bar:~$ trabas server run --public-port 8001 --client-port 8002
@@ -69,7 +69,7 @@ You may also use a reverse proxy to hide the actual port if needed.
 
 ## Deployment
 
-For remote server deployment, minimal config as mentioned earlier is adequate for testing purpose. But, you may secure the data exchange between client service and server service through TLS connection. The well-rounded example can be found [here](https://github.com/amirkode/trabas/blob/main/doc/SETUP_SERVER.md).
+For remote server deployment, minimal config as mentioned earlier is adequate for testing purpose. But, you may secure the data exchange between client service and server service through TLS connection. The well-rounded example can be found [here](./doc/site/src/user_guide/tunnel_setup/tls_setup.md).
 
 ## Demo
 Here's the demo showing how the tunneling works using `Trabas`.

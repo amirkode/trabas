@@ -6,3 +6,5 @@ title = "HTTP Tunneling Tool | Trabas"
 
 [output.html]
 default-theme = "ayu"
+git-repository-url = "https://github.com/amirkode/trabas"
+edit-url-template = "https://github.com/amirkode/trabas/edit/main/doc/site/{path}"

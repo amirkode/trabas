@@ -39,16 +39,16 @@ Here's how to start tunneling:
 
 Ensure a redis server is available in your system if the `SV_REDIS_ENABLE` config is set to `true`. Then, initialize the config as mentioned [here](./doc/site/src/reference_guide/configuration/server.md).
 Start the service:
-```console
-foo@bar:~$ trabas server run --public-port 8001 --client-port 8002
+```bash
+trabas server run --public-port 8001 --client-port 8002
 ```
 This starts the public request and client service listeners. You may want to limit the number of requests in a time for every request to each client service, just pass the `--client-request-limit [your value]` argument.
 
 **Client Service**
 
 Initialize the config as mentioned [here](./doc/site/src/reference_guide/configuration/client.md). Start the service:
-```console
-foo@bar:~$ trabas client serve --host localhost --port 3000
+```bash
+trabas client serve --host localhost --port 3000
 ```
 this starts the public request and client service listeners.
 

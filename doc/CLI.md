@@ -3,8 +3,6 @@
 ## Introduction
 `trabas` (the name of the binary file) is a command-line interface (CLI) tool designed for All-in-One functionality for HTTP tunneling. This guide provides detailed documentation for all available commands and options.
 
----
-
 ## Usage
 The basic syntanx for using `trabas` is:
 

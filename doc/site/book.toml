@@ -1,0 +1,27 @@
+[book]
+authors = ["Amir Mu'tashim Billah", "Liter8.sh"]
+language = "en"
+src = "src"
+title = "Trabas | HTTP Tunneling Tool (ngrok Alternative)"
+description = "Trabas is an open-source HTTP tunneling tool (an ngrok alternative) to securely expose local services over the internet."
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/amirkode/trabas"
+edit-url-template = "https://github.com/amirkode/trabas/edit/main/doc/site/{path}"
+site-url = "https://trabas.liter8.sh"
+smart-punctuation = true
+copy-fonts = true
+mathjax-support = false
+additional-css = []
+additional-js = []
+
+[output.html.search]
+use-boolean-and = true
+boost-title = 3
+boost-hierarchy = 2
+boost-paragraph = 1
+expand = true
+heading-split-level = 2
+limit-results = 30

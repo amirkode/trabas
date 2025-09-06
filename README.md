@@ -1,7 +1,7 @@
 # Trabas - an HTTP Tunneling Tool
 > This project is still under initial development. A breaking change might happen anytime. Please, use it while watching for the latest update.
 
-Trabas is an (ngrok-like inspired) HTTP tunneling written in Rust utilizing standard TCP connection for data exchange. It offers simplicity for basic tunneling usage through an _easy-to-use_ All-in-One CLI. Find out more below!
+Trabas is an (ngrok-like inspired) HTTP tunneling tool utilizing standard TCP connection for data exchange. It offers simplicity for basic tunneling usage through an _easy-to-use_ All-in-One CLI. Find out more below!
 
 ## Features
 - Basic HTTP Tunneling.
@@ -31,13 +31,13 @@ you can find the built binary in `target/release/trabas`.
 
 Ensure to rename binary file name to `trabas` if necessary.
 
-Once you have the binary installed, you may want to know the usage of the CLI commands. The documentation can be found [here](https://github.com/amirkode/trabas/blob/main/doc/CLI.md).
+Once you have the binary installed, you may want to know the usage of the CLI commands. The documentation can be found [here](./doc/site/src/reference_guide/cli/README.md).
 
 Here's how to start tunneling:
 
 **Server Service**
 
-Ensure a redis server is available in your system if the `SV_REDIS_ENABLE` config is set to `true`. Then, initialize the config as mentioned [here](https://github.com/amirkode/trabas/blob/main/doc/CONFIG.md).
+Ensure a redis server is available in your system if the `SV_REDIS_ENABLE` config is set to `true`. Then, initialize the config as mentioned [here](./doc/site/src/reference_guide/configuration/server.md).
 Start the service:
 ```console
 foo@bar:~$ trabas server run --public-port 8001 --client-port 8002
@@ -46,7 +46,7 @@ This starts the public request and client service listeners. You may want to lim
 
 **Client Service**
 
-Initialize the config as mentioned [here](https://github.com/amirkode/trabas/blob/main/doc/CONFIG.md). Start the service:
+Initialize the config as mentioned [here](./doc/site/src/reference_guide/configuration/client.md). Start the service:
 ```console
 foo@bar:~$ trabas client serve --host localhost --port 3000
 ```
@@ -69,7 +69,7 @@ You may also use a reverse proxy to hide the actual port if needed.
 
 ## Deployment
 
-For remote server deployment, minimal config as mentioned earlier is adequate for testing purpose. But, you may secure the data exchange between client service and server service through TLS connection. The well-rounded example can be found [here](https://github.com/amirkode/trabas/blob/main/doc/SETUP_SERVER.md).
+For remote server deployment, minimal config as mentioned earlier is adequate for testing purpose. But, you may secure the data exchange between client service and server service through TLS connection. The well-rounded example can be found [here](./doc/site/src/user_guide/tunnel_setup/tls_setup.md).
 
 ## Demo
 Here's the demo showing how the tunneling works using `Trabas`.

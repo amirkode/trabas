@@ -37,7 +37,7 @@ Here's how to start tunneling:
 
 **Server Service**
 
-Ensure a redis server is available in your system if the `SV_REDIS_ENABLE` config is set to `true`. Then, initialize the config as mentioned [here](./doc/site/src/reference_guide/configuration/README.md).
+Ensure a redis server is available in your system if the `SV_REDIS_ENABLE` config is set to `true`. Then, initialize the config as mentioned [here](./doc/site/src/reference_guide/configuration/server.md).
 Start the service:
 ```console
 foo@bar:~$ trabas server run --public-port 8001 --client-port 8002

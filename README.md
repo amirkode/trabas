@@ -39,16 +39,16 @@ Here's how to start tunneling:
 
 Ensure a redis server is available in your system if the `SV_REDIS_ENABLE` config is set to `true`. Then, initialize the config as mentioned [here](./doc/site/src/reference_guide/configuration/server.md).
 Start the service:
-```console
-foo@bar:~$ trabas server run --public-port 8001 --client-port 8002
+```bash
+trabas server run --public-port 8001 --client-port 8002
 ```
 This starts the public request and client service listeners. You may want to limit the number of requests in a time for every request to each client service, just pass the `--client-request-limit [your value]` argument.
 
 **Client Service**
 
 Initialize the config as mentioned [here](./doc/site/src/reference_guide/configuration/client.md). Start the service:
-```console
-foo@bar:~$ trabas client serve --host localhost --port 3000
+```bash
+trabas client serve --host localhost --port 3000
 ```
 this starts the public request and client service listeners.
 
@@ -77,8 +77,8 @@ Here's the demo showing how the tunneling works using `Trabas`.
 [![Watch the video](https://github.com/user-attachments/assets/47b7397b-45e8-47f5-9296-7f18998cda8e)](https://jotling.liter8.sh/trabas-demo-v1?media=video)
 
 ## Change Logs
-### **v0.2.0** <sub><sup>(pre-release)</sup></sub>
-Native TLS support for server service including SSL key generation, native TLS acceptor, and TOFU (Trust On First Use) option.
+### [**v0.2.0**](https://github.com/amirkode/trabas/releases/tag/trabas-v0.2.0) <sub><sup>(2025-09-06)</sup></sub>
+Added native TLS support for the server (built-in SSL key generation, native TLS acceptor, and TOFU), improved security and public-request handling, and began comprehensive mdBook documentation.
 
 ### [**v0.1.2**](https://github.com/amirkode/trabas/releases/tag/trabas-v0.1.2) <sub><sup>(2025-07-25)</sup></sub>
 Optimized tunnel connection handling (including improved loops, health checks, deadlock prevention, and request distribution). Added version compatibility checks and upstream (underlying service) connection validation.

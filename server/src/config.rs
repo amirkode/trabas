@@ -128,7 +128,6 @@ pub fn generate_server_secret(force: bool) -> () {
 }
 
 pub fn generate_ssl_keys(server_config_path: Option<String>, host: Option<String>, ip: Option<String>, force: bool) -> () {
-    // TODO: add TOFU option, without CA
     // generate self-signed SSL keys and saved in trabas_config/ssl
     let base_config_dir = get_config_path();
     let ssl_dir = Path::new(&base_config_dir).join("ssl");
